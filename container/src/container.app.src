@@ -1,0 +1,11 @@
+{application, container,
+ [{description, "A container manages the execution of several agents in a node."},
+  {vsn, "0.1.0"},
+  {modules, [container_app, container_sup, manager, agents_sup]},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {mod, {container_app, []}},
+  {env, []}
+ ]}.
+
+
