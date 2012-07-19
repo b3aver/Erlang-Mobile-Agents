@@ -12,6 +12,7 @@
 
 %% API
 -export([start_link/0]).
+-export([start_agent/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,6 +32,16 @@
 %%--------------------------------------------------------------------
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+
+
+start_agent(Agent, Module, Function, Arguments) ->
+    Restart = transient, %% restarted only if terminate abnormally
+    Shutdown = 2000,
+    Type = worker,
+    supervisor:start_child(?SERVER, {Agent, {Module, Function, Arguments},
+                                     Restart, Shutdown, Type, [Module]}).
+
+
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -56,12 +67,12 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Restart = permanent,
-    Shutdown = 2000,
-    Type = worker,
+    %% Restart = permanent,
+    %% Shutdown = 2000,
+    %% Type = worker,
 
-    AChild = {'AName', {'AModule', start_link, []},
-              Restart, Shutdown, Type, ['AModule']},
+    %% AChild = {'AName', {'AModule', start_link, []},
+    %%           Restart, Shutdown, Type, ['AModule']},
 
     {ok, {SupFlags, []}}.
 
