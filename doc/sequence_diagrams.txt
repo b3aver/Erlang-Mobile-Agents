@@ -1,0 +1,42 @@
+'-------------------------------------------------------------------
+' @author Paolo C Sberna <reliablebeaver86-cs@yahoo.it>
+' @copyright (C) 2012, Paolo C Sberna
+' @doc
+'
+' Sequence Diagrams created with PlantUML http://plantuml.sourceforge.net
+'
+' @end
+' Created : 20 Jul 2012 by Paolo C Sberna <reliablebeaver86-cs@yahoo.it>
+'-------------------------------------------------------------------
+
+@startuml img/sequence_start_agents.png
+[-> manager@node1: start_agent(agent1, Module, Function, Arguments)
+'manager@node1 -> manager@node1: register(agent1)
+note over manager@node1: register(agent1)
+manager@node1 -> agents_sup@node1: start_agent(agent1, Module, Function, Arguments)
+create agent1@node1
+agents_sup@node1 -> agent1@node1: Module:Function(Arguments)
+note left agent1@node1: agent1 now runs on node1
+@enduml
+
+
+@startuml img/sequence_migration.png
+activate agent1@node1 
+agent1@node1 -> manager@node1: migrate(node2, agent1, Module, Function, Arguments)
+manager@node1 -> platform@node0: lookfor_container(node2)
+platform@node0 -> manager@node1: manager@node2
+manager@node1 -> manager@node2: start_agent(agent1, Module, Function, Arguments)
+manager@node2 -> agents_sup@node2: start_agent(agent1, Module, Function, Arguments)
+create agent1@node2
+agents_sup@node2 -> agent1@node2: Module:Function(Arguments)
+note left agent1@node2: agent1 now runs on node2
+agent1@node1 <-] : ok
+destroy agent1@node1 
+@enduml
+
+
+@startuml img/sequence_container_registration.png
+container@node1 -> platform@node0: register(ContainerPid)
+'platform@node0 -> platform@node0: db_insert(ContainerPid)
+note over platform@node0:  db_insert(ContainerPid)\nplatform save ContainerPid
+@enduml
