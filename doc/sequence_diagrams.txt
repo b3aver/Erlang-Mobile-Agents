@@ -22,7 +22,8 @@ note left agent1@node1: agent1 now runs on node1
 
 @startuml img/sequence_migration.png
 activate agent1@node1 
-agent1@node1 -> manager@node1: migrate(node2, agent1, Module, Function, Arguments)
+agent1@node1 -> manager@node1: migrate(node2, Function, Arguments)
+note over manager@node1: retrieve the Module of agent1
 manager@node1 -> platform@node0: lookfor_container(node2)
 platform@node0 -> manager@node1: manager@node2
 manager@node1 -> manager@node2: start_agent(agent1, Module, Function, Arguments)
@@ -39,4 +40,5 @@ destroy agent1@node1
 container@node1 -> platform@node0: register(ContainerPid)
 'platform@node0 -> platform@node0: db_insert(ContainerPid)
 note over platform@node0:  db_insert(ContainerPid)\nplatform save ContainerPid
+platform@node0 -> container@node1: ok
 @enduml
