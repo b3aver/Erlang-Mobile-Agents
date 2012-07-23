@@ -12,6 +12,7 @@
 
 %% API
 -export([start_link/0]).
+-export([start_agent/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -35,8 +36,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% run(Module, Function, Arguments) ->
-%%     gen_server:
+start_agent(Agent, Module, Function, Arguments) ->
+    gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments}).
 
 
 %%%===================================================================
@@ -71,9 +72,15 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({start_agent, Agent, Module, Function, Arguments}, _From, State) ->
+    Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+    {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
+
+
 
 %%--------------------------------------------------------------------
 %% @private
