@@ -184,7 +184,7 @@ groups() ->
 %% @end
 %%--------------------------------------------------------------------
 all() -> 
-    [start_stop_case, init_case, handle_call_case, handle_cast_case, black_box_case].
+    [start_stop_case, init_case, handle_call_case, handle_cast_case, introduce_case, stop_case].
 
 
 %%--------------------------------------------------------------------
@@ -274,14 +274,24 @@ handle_cast_case(_Config) ->
     ok.
 
 
-black_box_case(_Config) -> 
+introduce_case(_Config) ->
     Agent = agent,
     {ok, AgentPid} = agent:start_link(Agent),
-    AgentPid = gen_server:call(Agent, introduce),
-    ok = gen_server:cast(Agent, stop),
+    AgentPid = agent:introduce(Agent),
+    agent:stop(Agent),
+
+    ok.
+
     
+stop_case(_Config) ->
+    Agent = agent,
+    {ok, AgentPid} = agent:start_link(Agent),
+    ok = agent:stop(Agent),
+
     receive after 100 -> nill end,
     undefined = whereis(Agent),
     false = is_process_alive(AgentPid),
     
     ok.
+
+
