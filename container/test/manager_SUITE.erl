@@ -13,6 +13,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+-include("../src/manager.hrl").
+
 %%--------------------------------------------------------------------
 %% COMMON TEST CALLBACK FUNCTIONS
 %%--------------------------------------------------------------------
@@ -184,7 +186,10 @@ groups() ->
 all() -> 
     [start_stop_case,
      init_case,
-     handle_call_case,
+     handle_call_unknown_command_case,
+     handle_call_start_agent_running_case,
+     handle_call_start_agent_present_case,
+     handle_call_start_agent_new_case,
      handle_cast_case,
      start_agent_case].
 
@@ -252,24 +257,95 @@ start_stop_case(_Config) ->
     ok.
 
 
--record(state, {}).
-
 init_case(_Config) ->
-    {ok, #state{}} = manager:init([]),
+    {ok, #state{agents=[]}} = manager:init([]),
 
     ok.
 
 
-handle_call_case(_Config) ->
+handle_call_unknown_command_case(_Config) ->
     %% fake_command
     {reply, ok, fake_state} = manager:handle_call(fake_command, from, fake_state),
+
+    ok.
+
+
+handle_call_start_agent_running_case(_Config) ->
+    %% start_agent
+    %% Agent present in the state and running
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [],
+    State = #state{agents=[#agent{name=Agent,
+                                     state=running}]},
+    {reply, still_running, State} = manager:handle_call({start_agent, Agent,
+                                                         Module,
+                                                         Function,
+                                                         Arguments},
+                                                        from, State),
     
+    ok.
+    
+
+handle_call_start_agent_present_case(_Config) ->
+    %% start_agent
+    %% Agent present in the state but not running
+    process_flag(trap_exit, true),
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [],
+    OldState = #state{agents=[#agent{name=Agent,
+                                    state=terminated}]},
+    NewState = #state{agents=[#agent{name=Agent,
+                                     module=Module,
+                                     function=Function,
+                                     arguments=Arguments,
+                                     state=running}]},
+    {ok, SupPid} = agents_sup:start_link(),
+
+    {reply, Ret, NewState} = manager:handle_call({start_agent, Agent,
+                                                  Module, Function,Arguments},
+                                                 from, OldState),
+    case Ret of
+        {ok, _AgentPid} ->
+            ok;
+        {ok, _AgentPid, _Info} ->
+            ok;
+        {error, _Error} ->
+            exit(start_agent_error)
+    end,
+
+    exit(SupPid, kill),
+    receive
+        {'EXIT', SupPid, killed } ->
+            ok
+    after
+        1000 -> exit(shutdown_error)
+    end,
+
+    ok.
+
+
+
+handle_call_start_agent_new_case(_Config) ->
     %% start_agent
     process_flag(trap_exit, true),
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [],
+    OldState = #state{agents=[anything]},
+    NewState = #state{agents=[#agent{name=Agent,
+                                     module=Module,
+                                     function=Function,
+                                     arguments=Arguments,
+                                     state=running}|[anything]]},
     {ok, SupPid} = agents_sup:start_link(),
-    {reply, Ret, fake_state} = manager:handle_call({start_agent, agent,
-                                                    agent, start_link, []},
-                                                   from, fake_state),
+    {reply, Ret, NewState} = manager:handle_call({start_agent, Agent,
+                                                  Module, Function,Arguments},
+                                                 from, OldState),
     case Ret of
         {ok, _AgentPid} ->
             ok;

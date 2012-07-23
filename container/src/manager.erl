@@ -20,7 +20,8 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {}).
+-include("manager.hrl").
+%-record(state, {agents}).
 
 %%%===================================================================
 %%% API
@@ -56,7 +57,7 @@ start_agent(Agent, Module, Function, Arguments) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    {ok, #state{agents=[]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -72,10 +73,33 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start_agent, Agent, Module, Function, Arguments}, _From, State) ->
-    Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
-    {reply, Reply, State};
-
+handle_call({start_agent, Agent, Module, Function, Arguments},
+            _From,
+            #state{agents=OldAgents}) ->
+    case lists:keysearch(Agent, #agent.name, OldAgents) of
+        {value, #agent{state=running}} ->
+            {reply, still_running, #state{agents=OldAgents}};
+        {value, _AgentRecord} ->
+            OldAgentsPurged = lists:keydelete(Agent, #agent.name, OldAgents),
+            NewState = #state{agents=[#agent{name=Agent,
+                                             module=Module,
+                                             function=Function,
+                                             arguments=Arguments,
+                                             state=running}
+                                      |OldAgentsPurged]},
+            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            {reply, Reply, NewState};
+        false ->
+            NewState = #state{agents=[#agent{name=Agent,
+                                             module=Module,
+                                             function=Function,
+                                             arguments=Arguments,
+                                             state=running}
+                                      |OldAgents]},
+            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            {reply, Reply, NewState}
+    end;
+        
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
