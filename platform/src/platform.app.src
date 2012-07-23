@@ -1,0 +1,14 @@
+{application, platform,
+ [{description, "A platform gathers several container in different nodes and aids their comunications."} ,
+  {vsn, "0.1.0"},
+  {modules, [platform_app,
+             platform_sup,
+             whitepages]},
+  {registered, [platform_sup,
+                whitepages]},
+  {applications, [kernel, stdlib]},
+  {mod, {platform_app, []}},
+  {env, []}
+ ]}.
+
+
