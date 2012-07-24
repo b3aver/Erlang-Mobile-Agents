@@ -78,7 +78,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
             #state{agents=OldAgents}) ->
     case lists:keysearch(Agent, #agent.name, OldAgents) of
         {value, #agent{state=running}} ->
-            {reply, still_running, #state{agents=OldAgents}};
+            {reply, {error, still_running}, #state{agents=OldAgents}};
         {value, _AgentRecord} ->
             OldAgentsPurged = lists:keydelete(Agent, #agent.name, OldAgents),
             NewState = #state{agents=[#agent{name=Agent,

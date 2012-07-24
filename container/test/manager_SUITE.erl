@@ -279,11 +279,12 @@ handle_call_start_agent_running_case(_Config) ->
     Arguments = [],
     State = #state{agents=[#agent{name=Agent,
                                      state=running}]},
-    {reply, still_running, State} = manager:handle_call({start_agent, Agent,
-                                                         Module,
-                                                         Function,
-                                                         Arguments},
-                                                        from, State),
+    {reply, {error, still_running}, State} = manager:handle_call({start_agent,
+                                                                  Agent,
+                                                                  Module,
+                                                                  Function,
+                                                                  Arguments},
+                                                                 from, State),
     
     ok.
     
