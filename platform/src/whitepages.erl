@@ -74,7 +74,7 @@ init([]) ->
 handle_call({register, Container, Node}, _From, #state{containers=ContList}) ->
     %% TODO check that From is the Container's pid
     case lists:keysearch(Container, #container.name, ContList) of
-        {value, ContainerSaved} ->
+        {value, _ContainerSaved} ->
             %% Container is already present in the ContList
             Reply = {error, already_present},
             State = #state{containers=ContList},
