@@ -12,7 +12,8 @@
 
 %% API
 -export([start_link/0]).
--export([register/2]).
+-export([register/2,
+         containers/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -38,6 +39,9 @@ start_link() ->
 
 register(Container, Node) ->
     gen_server:call(?SERVER, {register, Container, Node}).
+
+containers() ->
+    gen_server:call(?SERVER, containers).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -86,6 +90,9 @@ handle_call({register, Container, Node}, _From, #state{containers=ContList}) ->
             Reply = ok,
             {reply, Reply, State}
         end;
+
+handle_call(containers, _From, State) ->
+    {reply, State#state.containers, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

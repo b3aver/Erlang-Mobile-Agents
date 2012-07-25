@@ -189,8 +189,10 @@ all() ->
      handle_call_unknown_command_case,
      handle_call_register_present_case,
      handle_call_register_new_case,
+     handle_call_containers_case,
      handle_cast_case,
-     register_case].
+     register_case,
+     containers_case].
 
 
 %%--------------------------------------------------------------------
@@ -298,6 +300,14 @@ handle_call_register_new_case(_Config) ->
 
     ok.
 
+
+handle_call_containers_case(_Config) ->
+    ContList = [hello, world],
+    State = #state{containers=ContList},
+    {reply, ContList, State} = whitepages:handle_call(containers, from, State),
+
+    ok.
+
     
 handle_cast_case(_Config) ->
     {noreply, fake_state} = whitepages:handle_cast(fake_msg, fake_state),
@@ -337,5 +347,33 @@ register_case(_Config) ->
     ok.
     
 
+containers_case(_Config) ->
+    Container = container,
+    Node = node,
+    process_flag(trap_exit, true),
+    {ok, WhPid} = whitepages:start_link(),    
+    case whitepages:register(Container, Node) of
+        ok ->
+            ok;
+        already_present ->
+            exit(register_error)
+    end,
+    
+    case whitepages:containers() of
+        [#container{name=Container, node=Node}] ->
+            ok;
+        _ ->
+            exit(containers_error)
+    end,
+
+    exit(WhPid, kill),
+    receive
+        {'EXIT', WhPid, killed } ->
+            ok
+    after
+        1000 -> exit(shutdown_error)
+    end,
+    
+    ok.
 
 
