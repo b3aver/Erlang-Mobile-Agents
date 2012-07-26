@@ -13,6 +13,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+-include("../src/whitepages.hrl").
+-record(config, {platformNode}).
+
 %%--------------------------------------------------------------------
 %% COMMON TEST CALLBACK FUNCTIONS
 %%--------------------------------------------------------------------
@@ -53,7 +56,20 @@ suite() ->
 %% @end
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    Config.
+    %% create another node running the platform application
+    PlatformNodeS = platform,
+    PlatformNodeL = list_to_atom("platform@"++net_adm:localhost()), 
+    %% Args = "-s application start platform",
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, PlatformNodeL} = slave:start(net_adm:localhost(), PlatformNodeS, Args),
+    pong = net_adm:ping(PlatformNodeL),
+
+    MyConfig = #config{platformNode = PlatformNodeL},
+
+    [MyConfig|Config].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,7 +81,11 @@ init_per_suite(Config) ->
 %% @spec end_per_suite(Config) -> _
 %% @end
 %%--------------------------------------------------------------------
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
+    %% stop the platform node
+    ok = slave:stop(MyConfig#config.platformNode),
+    
     ok.
 
 %%--------------------------------------------------------------------
@@ -121,6 +141,11 @@ end_per_group(_GroupName, _Config) ->
 %% @end
 %%--------------------------------------------------------------------
 init_per_testcase(_TestCase, Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
+     %% start the platform application
+    ok = rpc:call(MyConfig#config.platformNode, application, start, [platform]),
+
+    %% [MyConfig|Config].
     Config.
 
 %%--------------------------------------------------------------------
@@ -136,7 +161,11 @@ init_per_testcase(_TestCase, Config) ->
 %%               void() | {save_config,Config1} | {fail,Reason}
 %% @end
 %%--------------------------------------------------------------------
-end_per_testcase(_TestCase, _Config) ->
+end_per_testcase(_TestCase, Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
+    %% stop the platform application
+    ok = rpc:call(MyConfig#config.platformNode, application, stop, [platform]),
+
     ok.
 
 %%--------------------------------------------------------------------
@@ -182,7 +211,8 @@ groups() ->
 %% @end
 %%--------------------------------------------------------------------
 all() -> 
-    [register_case].
+    [register_case,
+     containers_case].
 
 
 %%--------------------------------------------------------------------
@@ -227,29 +257,35 @@ my_test_case(_Config) ->
     ok.
 
 
-register_case(_Config) ->
-    %% create another node running the platform application
-    PlatformNodeS = platform,
-    PlatformNodeL = list_to_atom("platform@"++net_adm:localhost()), 
-    %% Args = "-s application start platform",
-    CodePath = code:get_path(),
-    Args = "-pa "++lists:nth(3, CodePath)
-        ++" "++lists:nth(2, CodePath)
-        ++" "++lists:nth(1, CodePath),
-    {ok, PlatformNodeL} = slave:start(net_adm:localhost(), PlatformNodeS, Args),
-    pong = net_adm:ping(PlatformNodeL),
-    
-    ok = rpc:call(PlatformNodeL, application, start, [platform]),
-
+register_case(Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
     %% test the register function
     Container = container,
     Node = node(),
-    ok = gen_server:call({whitepages, PlatformNodeL}, {register, Container, Node}),
-    {error, already_present} = gen_server:call({whitepages, PlatformNodeL},
+    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
+                         {register, Container, Node}),
+    {error, already_present} = gen_server:call({whitepages, 
+                                                MyConfig#config.platformNode },
                                                {register, Container, Node}),
+
+    ok.
+
+
+containers_case(Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
+    %% test the containers function
+    Container = container,
+    Node = node(),
+    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
+                         {register, Container, Node}),
+
+    Container2 = container2,
+    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
+                         {register, Container2, Node}),
     
-
-    %% stop the node with the platform application
-
-
+    ContList = [#container{name=Container2, node=Node},
+                #container{name=Container, node=Node}],
+    ContList = gen_server:call({whitepages, MyConfig#config.platformNode},
+                               containers),
+    
     ok.
