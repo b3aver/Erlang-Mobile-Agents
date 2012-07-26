@@ -262,11 +262,9 @@ register_case(Config) ->
     %% test the register function
     Container = container,
     Node = node(),
-    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
-                         {register, Container, Node}),
-    {error, already_present} = gen_server:call({whitepages, 
-                                                MyConfig#config.platformNode },
-                                               {register, Container, Node}),
+    ok = whitepages:register(MyConfig#config.platformNode, Container, Node),
+    {error, already_present} = whitepages:register(MyConfig#config.platformNode,
+                                                   Container, Node),
 
     ok.
 
@@ -276,16 +274,13 @@ containers_case(Config) ->
     %% test the containers function
     Container = container,
     Node = node(),
-    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
-                         {register, Container, Node}),
+    ok = whitepages:register(MyConfig#config.platformNode, Container, Node),
 
     Container2 = container2,
-    ok = gen_server:call({whitepages, MyConfig#config.platformNode},
-                         {register, Container2, Node}),
+    ok = whitepages:register(MyConfig#config.platformNode, Container2, Node),
     
     ContList = [#container{name=Container2, node=Node},
                 #container{name=Container, node=Node}],
-    ContList = gen_server:call({whitepages, MyConfig#config.platformNode},
-                               containers),
+    ContList = whitepages:containers(MyConfig#config.platformNode),
     
     ok.

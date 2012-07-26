@@ -13,7 +13,9 @@
 %% API
 -export([start_link/0]).
 -export([register/2,
-         containers/0]).
+         register/3,
+         containers/0,
+         containers/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,11 +39,18 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-register(Container, Node) ->
-    gen_server:call(?SERVER, {register, Container, Node}).
+
+register(Container, ContainerNode) ->
+    gen_server:call(?SERVER, {register, Container, ContainerNode}).
+register(ServerNode, Container, ContainerNode) ->
+    gen_server:call({?SERVER, ServerNode}, {register, Container, ContainerNode}).
+
 
 containers() ->
     gen_server:call(?SERVER, containers).
+containers(ServerNode) ->
+    gen_server:call({?SERVER, ServerNode}, containers).
+
 
 %%%===================================================================
 %%% gen_server callbacks

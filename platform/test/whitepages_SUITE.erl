@@ -220,12 +220,16 @@ all() ->
      handle_call_register_new_case,
      handle_call_containers_case,
      handle_cast_case,
-     register_case,
-     containers_case].
+     register2_case,
+     register3_case,
+     containers0_case,
+     containers1_case].
 
 api_testcases() ->
-    [register_case,
-     containers_case].
+    [register2_case,
+     register3_case,
+     containers0_case,
+     containers1_case].
 
 
 %%--------------------------------------------------------------------
@@ -348,7 +352,7 @@ handle_cast_case(_Config) ->
     ok.
 
 
-register_case(_Config) ->
+register2_case(_Config) ->
     Container = container,
     Node = node,
     
@@ -367,9 +371,30 @@ register_case(_Config) ->
     end,
     
     ok.
-    
 
-containers_case(_Config) ->
+
+register3_case(_Config) ->
+    Container = container,
+    Node = node,
+    
+    case whitepages:register(node(), Container, Node) of
+        ok ->
+            ok;
+        already_present ->
+            exit(register_error)
+    end,
+    
+    case whitepages:register(node(), Container, Node) of
+        ok ->
+            exit(register_error);
+        {error, already_present} ->
+            ok
+    end,
+    
+    ok.
+
+
+containers0_case(_Config) ->
     Container = container,
     Node = node,
 
@@ -389,4 +414,24 @@ containers_case(_Config) ->
 
     ok.
 
+
+containers1_case(_Config) ->
+    Container = container,
+    Node = node,
+
+    case whitepages:register(node(), Container, Node) of
+        ok ->
+            ok;
+        already_present ->
+            exit(register_error)
+    end,
+    
+    case whitepages:containers(node()) of
+        [#container{name=Container, node=Node}] ->
+            ok;
+        _ ->
+            exit(containers_error)
+    end,
+
+    ok.
 
