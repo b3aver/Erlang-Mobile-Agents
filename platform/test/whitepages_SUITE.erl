@@ -122,7 +122,17 @@ end_per_group(_GroupName, _Config) ->
 %%               Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
 %% @end
 %%--------------------------------------------------------------------
-init_per_testcase(_TestCase, Config) ->
+init_per_testcase(TestCase, Config) ->
+    case lists:any(fun(E) -> E == TestCase end, api_testcases()) of
+        true ->
+            process_flag(trap_exit, true),
+            {ok, _WhPid} = whitepages:start_link(),    
+            
+            ok;
+        false ->
+            ok
+    end,
+    
     Config.
 
 %%--------------------------------------------------------------------
@@ -138,7 +148,26 @@ init_per_testcase(_TestCase, Config) ->
 %%               void() | {save_config,Config1} | {fail,Reason}
 %% @end
 %%--------------------------------------------------------------------
-end_per_testcase(_TestCase, _Config) ->
+end_per_testcase(TestCase, _Config) ->
+    case lists:any(fun(E) -> E == TestCase end, api_testcases()) of
+        true ->
+            WhPid = whereis(whitepages),
+            exit(WhPid, kill),
+            receive
+                {'EXIT', WhPid, killed } ->
+                    ok
+            after
+                1000 -> exit(shutdown_error)
+            end,
+
+            ok;
+        false ->
+            ok
+    end,
+    
+    
+    
+
     ok.
 
 %%--------------------------------------------------------------------
@@ -192,6 +221,10 @@ all() ->
      handle_call_containers_case,
      handle_cast_case,
      register_case,
+     containers_case].
+
+api_testcases() ->
+    [register_case,
      containers_case].
 
 
@@ -319,9 +352,6 @@ register_case(_Config) ->
     Container = container,
     Node = node,
     
-    process_flag(trap_exit, true),
-    {ok, WhPid} = whitepages:start_link(),
-    
     case whitepages:register(Container, Node) of
         ok ->
             ok;
@@ -335,14 +365,6 @@ register_case(_Config) ->
         {error, already_present} ->
             ok
     end,
-
-    exit(WhPid, kill),
-    receive
-        {'EXIT', WhPid, killed } ->
-            ok
-    after
-        1000 -> exit(shutdown_error)
-    end,
     
     ok.
     
@@ -350,8 +372,7 @@ register_case(_Config) ->
 containers_case(_Config) ->
     Container = container,
     Node = node,
-    process_flag(trap_exit, true),
-    {ok, WhPid} = whitepages:start_link(),    
+
     case whitepages:register(Container, Node) of
         ok ->
             ok;
@@ -366,14 +387,6 @@ containers_case(_Config) ->
             exit(containers_error)
     end,
 
-    exit(WhPid, kill),
-    receive
-        {'EXIT', WhPid, killed } ->
-            ok
-    after
-        1000 -> exit(shutdown_error)
-    end,
-    
     ok.
 
 
