@@ -191,7 +191,8 @@ all() ->
      handle_call_start_agent_present_case,
      handle_call_start_agent_new_case,
      handle_cast_case,
-     start_agent_case].
+     start_agent4_case,
+     start_agent5_case].
 
 
 %%--------------------------------------------------------------------
@@ -373,12 +374,53 @@ handle_cast_case(_Config) ->
     ok.
 
 
-start_agent_case(_Config) ->
+start_agent4_case(_Config) ->
     Agent = agent,
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
     Ret = manager:start_agent(Agent, agent, start_link, []),
+    case Ret of
+        {ok, AgentPid} ->
+            true = erlang:is_process_alive(AgentPid),
+            AgentPid = whereis(Agent),
+            AgentPid = agent:introduce(Agent),
+            ok;
+        {ok, AgentPid, _Info} ->
+            true = erlang:is_process_alive(AgentPid),
+            AgentPid = whereis(Agent),
+            AgentPid = agent:introduce(Agent),
+            ok;
+        {error, _Error} ->
+            exit(start_agent_error)
+    end,
+
+    
+    agent:stop(Agent),
+    exit(SupPid, kill),
+    receive
+        {'EXIT', SupPid, killed } ->
+            ok
+    after
+        1000 -> exit(shutdown_error)
+    end,
+    exit(ManPid, kill),
+    receive
+        {'EXIT', ManPid, killed } ->
+            ok
+    after
+        1000 -> exit(shutdown_error)
+    end,
+
+    ok.
+
+
+start_agent5_case(_Config) ->
+    Agent = agent,
+    process_flag(trap_exit, true),
+    {ok, ManPid} = manager:start_link(),
+    {ok, SupPid} = agents_sup:start_link(),
+    Ret = manager:start_agent(node(), Agent, agent, start_link, []),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
