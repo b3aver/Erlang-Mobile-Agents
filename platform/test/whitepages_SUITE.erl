@@ -219,17 +219,22 @@ all() ->
      handle_call_register_present_case,
      handle_call_register_new_case,
      handle_call_containers_case,
+     handle_call_lookup_container_case,
      handle_cast_case,
      register2_case,
      register3_case,
      containers0_case,
-     containers1_case].
+     containers1_case,
+     lookup_container1_case,
+     lookup_container2_case].
 
 api_testcases() ->
     [register2_case,
      register3_case,
      containers0_case,
-     containers1_case].
+     containers1_case,
+     lookup_container1_case,
+     lookup_container2_case].
 
 
 %%--------------------------------------------------------------------
@@ -345,6 +350,28 @@ handle_call_containers_case(_Config) ->
 
     ok.
 
+
+handle_call_lookup_container_case(_Config) ->
+    Container1 = #container{name=container1, node=node1},
+    Container2 = #container{name=container2, node=node2},
+    ContList = [Container1, Container2],
+    State = #state{containers=ContList},
+
+    {reply, Container1, State} = whitepages:handle_call({lookup_container, node1},
+                                                        from,
+                                                        State),
+    
+    {reply, Container2, State} = whitepages:handle_call({lookup_container, node2},
+                                                        from,
+                                                        State),
+
+    {reply, {error, not_found}, State} = whitepages:handle_call({lookup_container,
+                                                                 node3},
+                                                                from,
+                                                                State),
+    
+    ok.
+    
     
 handle_cast_case(_Config) ->
     {noreply, fake_state} = whitepages:handle_cast(fake_msg, fake_state),
@@ -435,3 +462,64 @@ containers1_case(_Config) ->
 
     ok.
 
+
+lookup_container1_case(_Config) ->
+    Container = container,
+    Node = node,
+    case whitepages:register(Container, Node) of
+        ok ->
+            ok;
+        already_present ->
+            exit(register_error)
+    end,
+    
+    case whitepages:lookup_container(Node) of
+        #container{name=Container, node=Node} ->
+            ok;
+        _ ->
+            exit(lookup_container_error)
+    end,
+    case whitepages:lookup_container(node1) of
+        {error, not_found} ->
+            ok;
+        _ ->
+            exit(lookup_container_error)
+    end,
+
+    ok.
+
+
+lookup_container2_case(_Config) ->
+    Container = container,
+    Node = node,
+
+    case whitepages:register(node(), Container, Node) of
+        ok ->
+            ok;
+        already_present ->
+            exit(register_error)
+    end,
+    case whitepages:containers(node()) of
+        [#container{name=Container, node=Node}] ->
+            ok;
+        _ ->
+            exit(containers_error)
+    end,
+
+    
+    case whitepages:lookup_container(node(), Node) of
+        #container{name=Container, node=Node} ->
+            ok;
+        _ ->
+            exit(lookup_container_error)
+    end,
+    
+    case whitepages:lookup_container(node(), node1) of
+        {error, not_found} ->
+            ok;
+        _ ->
+            exit(lookup_container_error)
+    end,
+
+    ok.
+    

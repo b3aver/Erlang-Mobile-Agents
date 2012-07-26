@@ -15,7 +15,9 @@
 -export([register/2,
          register/3,
          containers/0,
-         containers/1]).
+         containers/1,
+         lookup_container/1,
+         lookup_container/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -50,6 +52,13 @@ containers() ->
     gen_server:call(?SERVER, containers).
 containers(ServerNode) ->
     gen_server:call({?SERVER, ServerNode}, containers).
+
+
+lookup_container(Node) ->
+    gen_server:call(?SERVER, {lookup_container, Node}).
+lookup_container(ServerNode, Node) ->
+    gen_server:call({?SERVER, ServerNode}, {lookup_container, Node}).
+
 
 
 %%%===================================================================
@@ -98,10 +107,22 @@ handle_call({register, Container, Node}, _From, #state{containers=ContList}) ->
                                        |ContList]},
             Reply = ok,
             {reply, Reply, State}
-        end;
+    end;
+
 
 handle_call(containers, _From, State) ->
     {reply, State#state.containers, State};
+
+
+handle_call({lookup_container, Node}, _From, State) ->
+    case lists:keysearch(Node, #container.node, State#state.containers) of
+        {value, Reply} ->
+            ok;
+        false ->
+            Reply = {error, not_found}
+    end,
+    {reply, Reply, State};
+
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

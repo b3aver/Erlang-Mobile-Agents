@@ -212,7 +212,8 @@ groups() ->
 %%--------------------------------------------------------------------
 all() -> 
     [register_case,
-     containers_case].
+     containers_case,
+     lookup_container_case].
 
 
 %%--------------------------------------------------------------------
@@ -283,4 +284,17 @@ containers_case(Config) ->
                 #container{name=Container, node=Node}],
     ContList = whitepages:containers(MyConfig#config.platformNode),
     
+    ok.
+
+
+lookup_container_case(Config) ->
+    {value, MyConfig} = lists:keysearch(config, 1, Config),
+    %% test the lookup_container function
+    Container = container,
+    Node = node(),
+    ok = whitepages:register(MyConfig#config.platformNode, Container, Node),
+    
+    #container{name=Container, node=Node}
+        = whitepages:lookup_container(MyConfig#config.platformNode, Node),
+
     ok.
