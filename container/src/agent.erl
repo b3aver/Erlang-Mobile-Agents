@@ -14,7 +14,9 @@
 -export([start_link/0]).
 -export([start_link/1,
         introduce/1,
-        stop/1]).
+        introduce/2,
+        stop/1,
+        stop/2]).
 
 
 %% gen_server callbacks
@@ -44,9 +46,13 @@ start_link(Name) ->
 
 introduce(Name) ->
     gen_server:call(Name, introduce).
+introduce(Name, ServerNode) ->
+    gen_server:call({Name, ServerNode}, introduce).
 
 stop(Name) ->
     gen_server:cast(Name, stop).
+stop(Name, ServerNode) ->
+    gen_server:cast({Name, ServerNode}, stop).
 
 
 
