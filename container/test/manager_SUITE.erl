@@ -300,20 +300,21 @@ handle_call_start_agent_present_case(_Config) ->
     Arguments = [],
     OldState = #state{agents=[#agent{name=Agent,
                                     state=terminated}]},
-    NewState = #state{agents=[#agent{name=Agent,
-                                     module=Module,
-                                     function=Function,
-                                     arguments=Arguments,
-                                     state=running}]},
     {ok, SupPid} = agents_sup:start_link(),
 
-    {reply, Ret, NewState} = manager:handle_call({start_agent, Agent,
-                                                  Module, Function,Arguments},
-                                                 from, OldState),
+    {reply, Ret, #state{agents=[#agent{name=Agent,
+                                       pid=AgentPid,
+                                       module=Module,
+                                       function=Function,
+                                       arguments=Arguments,
+                                       state=running}]}
+    } = manager:handle_call({start_agent, Agent,
+                             Module, Function,Arguments},
+                            from, OldState),
     case Ret of
-        {ok, _AgentPid} ->
+        {ok, AgentPid} ->
             ok;
-        {ok, _AgentPid, _Info} ->
+        {ok, AgentPid, _Info} ->
             ok;
         {error, _Error} ->
             exit(start_agent_error)
@@ -345,13 +346,19 @@ handle_call_start_agent_new_case(_Config) ->
                                      arguments=Arguments,
                                      state=running}|[anything]]},
     {ok, SupPid} = agents_sup:start_link(),
-    {reply, Ret, NewState} = manager:handle_call({start_agent, Agent,
-                                                  Module, Function,Arguments},
-                                                 from, OldState),
+    {reply, Ret, #state{agents=[#agent{name=Agent,
+                                       pid=AgentPid,
+                                       module=Module,
+                                       function=Function,
+                                       arguments=Arguments,
+                                       state=running}|[anything]]}
+    } = manager:handle_call({start_agent, Agent,
+                             Module, Function,Arguments},
+                            from, OldState),
     case Ret of
-        {ok, _AgentPid} ->
+        {ok, AgentPid} ->
             ok;
-        {ok, _AgentPid, _Info} ->
+        {ok, AgentPid, _Info} ->
             ok;
         {error, _Error} ->
             exit(start_agent_error)

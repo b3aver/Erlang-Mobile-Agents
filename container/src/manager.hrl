@@ -12,5 +12,5 @@
 
 -record(state, {agents}).
 
--record(agent, {name, module, function, arguments, state}).
+-record(agent, {name, pid, module, function, arguments, state}).
 
