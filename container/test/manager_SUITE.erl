@@ -185,14 +185,20 @@ groups() ->
 %%--------------------------------------------------------------------
 all() -> 
     [start_stop_case,
+     %% change_state_migrated_case,
      init_case,
      handle_call_unknown_command_case,
      handle_call_start_agent_running_case,
      handle_call_start_agent_present_case,
      handle_call_start_agent_new_case,
+     handle_call_migrate_not_present_case,
+     handle_call_migrate_different_pid_case,
+     handle_call_migrate_start_error_case,
+     handle_call_migrate_no_errors_case,
      handle_cast_case,
      start_agent4_case,
-     start_agent5_case].
+     start_agent5_case,
+     migrate_case].
 
 
 %%--------------------------------------------------------------------
@@ -238,6 +244,9 @@ my_test_case(_Config) ->
     ok.
 
 
+%%
+%% Start and stop test
+%%
 start_stop_case(_Config) ->
     process_flag(trap_exit, true),
 
@@ -258,6 +267,37 @@ start_stop_case(_Config) ->
     ok.
 
 
+%%
+%% Internal functions' tests
+%% (useless because aren't exported)
+%%
+change_state_migrated_case(_Config) ->
+    Agent = agent,
+    AgentInfo = #agent{name=Agent,
+                       pid=self(),
+                       module=?MODULE,
+                       function=hello_worlod,
+                       arguments=nothing,
+                       state=runnning},
+    AgentList = [#agent{name=agent2}, AgentInfo, #agent{name=agent3}],
+    OldState = #state{agents=AgentList},
+    NewState = #state{agents=[#agent{name=agent2},
+                              AgentInfo#agent{state=migrated, pid=undefined},
+                              #agent{name=agent3}]},
+    
+    case manager:change_state_migrated(OldState, Agent) of
+        NewState ->
+            ok;
+        _ -> 
+            exit(return_value_error)
+    end,
+    
+    ok.
+
+
+%%
+%% Callback functions' tests
+%%
 init_case(_Config) ->
     {ok, #state{agents=[]}} = manager:init([]),
 
@@ -270,7 +310,9 @@ handle_call_unknown_command_case(_Config) ->
 
     ok.
 
-
+%%
+%% start_agent
+%%
 handle_call_start_agent_running_case(_Config) ->
     %% start_agent
     %% Agent present in the state and running
@@ -340,12 +382,8 @@ handle_call_start_agent_new_case(_Config) ->
     Function = start_link,
     Arguments = [],
     OldState = #state{agents=[anything]},
-    NewState = #state{agents=[#agent{name=Agent,
-                                     module=Module,
-                                     function=Function,
-                                     arguments=Arguments,
-                                     state=running}|[anything]]},
     {ok, SupPid} = agents_sup:start_link(),
+
     {reply, Ret, #state{agents=[#agent{name=Agent,
                                        pid=AgentPid,
                                        module=Module,
@@ -374,13 +412,157 @@ handle_call_start_agent_new_case(_Config) ->
 
     ok.
 
+
+%%
+%% migrate
+%%
+handle_call_migrate_not_present_case(_Config) ->
+    %% migrate
+    %% Agent not present in the state of the manager.
+    Agent = agent,
+    Node = node,
+    Function = function,
+    Arguments = args,
+    From = {self(), ref},
+    State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}]},
+
+    {reply, {error, wrong_agent}, State} = manager:handle_call({migrate, Agent,
+                                                                Node, Function,
+                                                                Arguments},
+                                                               From, State),
+
+    ok.
     
-handle_cast_case(_Config) ->
-    {noreply, fake_state} = agent:handle_cast(fake_msg, fake_state),
+
+handle_call_migrate_different_pid_case(_Config) ->
+    %% migrate
+    %% Agent present in the state of the manager, but with different pid.
+    Agent = agent,
+    Node = node,
+    Function = function,
+    Arguments = args,
+    From = {list_to_pid("<0.1.0>"), ref},
+    AgentInfo = #agent{name=Agent, pid=list_to_pid("<0.2.0>")},
+    State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
+
+    {reply, {error, forbidden}, State} = manager:handle_call({migrate, Agent,
+                                                              Node, Function,
+                                                              Arguments},
+                                                             From, State),
+    
+    ok.
+
+
+handle_call_migrate_start_error_case(_Config) ->
+    %% migrate
+    %% try to start the agent in the other node, but occur an error
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [agent],
+    FromPid = list_to_pid("<0.1.0>"),
+    From = {FromPid, ref},
+    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
+                       arguments=Arguments, state=running},
+    State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
+
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% start an agent with the same name
+    case manager:start_agent(NodeL, Agent, agent, start_link, [agent]) of
+        {ok, _AgentPid} -> ok;
+        {ok, _AgentPid, _Info} -> ok;
+        {error, _Error} -> exit(start_agent_error)
+    end,
+
+    {reply, {error, restart_error}, State} = manager:handle_call({migrate, Agent,
+                                                                  NodeL, Function,
+                                                                  Arguments},
+                                                                 From, State),
+    
+    %% stop the container application
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
 
     ok.
 
 
+handle_call_migrate_no_errors_case(_Config) ->
+    %% migrate
+    %% start the agent in the other node
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [agent],
+    FromPid = list_to_pid("<0.1.0>"),
+    From = {FromPid, ref},
+    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
+                       arguments=Arguments, state=running},
+    State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
+
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% start an agent with a different name
+    case manager:start_agent(NodeL, agent2, agent, start_link, [agent2]) of
+        {ok, _AgentPid} -> ok;
+        {ok, _AgentPid, _Info} -> ok;
+        {error, _Error} -> exit(start_agent_error)
+    end,
+
+    NewAgentInfo = AgentInfo#agent{pid=undefined, state=migrated},
+    NewState = #state{agents=[#agent{name=agent1},
+                              #agent{name=agent2},
+                              NewAgentInfo]},
+    
+    {reply, ok, NewState} = manager:handle_call({migrate, Agent, NodeL, Function,
+                                              Arguments}, From, State),
+    
+    Pid = gen_server:call({agent, NodeL}, introduce),
+    true = is_pid(Pid),
+    
+    Children = supervisor:which_children({agents_sup, NodeL}),
+    {value, {Agent, Pid, worker, [Module]}} = lists:keysearch(Agent, 1, Children),
+    
+    %% stop the container application
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+
+    ok.
+
+    
+handle_cast_case(_Config) ->
+    {noreply, fake_state} = manager:handle_cast(fake_msg, fake_state),
+
+    ok.
+
+
+%%
+%% API functions' tests
+%%
 start_agent4_case(_Config) ->
     Agent = agent,
     process_flag(trap_exit, true),
@@ -462,4 +644,54 @@ start_agent5_case(_Config) ->
 
     ok.
 
+
+migrate_case(_Config) ->
+    %% migrate
+    %% start the agent in the other node
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [agent],
+
+    %% start the application container locally
+    ok = application:start(container),
+    %% start an agent in the current node
+    AgentPid = case manager:start_agent(Agent, Module, Function, Arguments) of
+                   {ok, APid} -> APid;
+                   {ok, APid, _Info} -> APid;
+                   {error, _Error} -> APid = error, exit(start_agent_error)
+               end,
+    AgentPid = agent:introduce(Agent),
+    
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application in the other node
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% migrate the node
+    ok = agent:migrate(Agent, NodeL),
+
+    Pid = gen_server:call({agent, NodeL}, introduce),
+    true = is_pid(Pid),
+    Children = supervisor:which_children({agents_sup, NodeL}),
+    {value, {Agent, Pid, worker, [Module]}} = lists:keysearch(Agent, 1, Children),
+
+    %% the local agent is really terminated
+    false = is_process_alive(AgentPid),
+   
+    %% stop the container application
+    ok = application:stop(container),
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+    
+    ok.
 

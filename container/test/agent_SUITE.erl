@@ -187,11 +187,13 @@ all() ->
     [start_stop_case,
      init_case,
      handle_call_case,
-     handle_cast_case,
+     handle_cast_unknown_command_case,
+     handle_cast_stop_case,
      introduce1_case,
      introduce2_case,
      stop1_case,
-     stop2_case].
+     stop2_case,
+     migrate1_case].
 
 
 %%--------------------------------------------------------------------
@@ -273,10 +275,15 @@ handle_call_case(_Config) ->
 
     ok.
 
-    
-handle_cast_case(_Config) ->
-    {stop, normal, fake_state} = agent:handle_cast(stop, fake_state),
+
+handle_cast_unknown_command_case(_Config) ->
     {noreply, fake_state} = agent:handle_cast(fake_msg, fake_state),
+
+    ok.
+
+    
+handle_cast_stop_case(_Config) ->
+    {stop, normal, fake_state} = agent:handle_cast(stop, fake_state),
 
     ok.
 
@@ -322,4 +329,54 @@ stop2_case(_Config) ->
     
     ok.
 
+
+migrate1_case(_Config) ->
+    %% migrate
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+    Agent = agent,
+
+    %% start the container application locally
+    ok = application:start(container),
+    %% start an agent locally
+    {ok, AgentPid} = manager:start_agent(Agent, agent, start_link, [Agent]),
+    AgentPid = agent:introduce(Agent),
+
+
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% appmon:start(),
+    %% AppmonPid = rpc:call(NodeL, appmon, start, []),
+    %% receive after 5000 -> ok end,
+
+    %% migrate the Agent to Node
+    ok = agent:migrate(Agent, NodeL),
+    receive after 100 -> ok end,
+    false = is_process_alive(AgentPid),
+
+    %% receive after 5000 -> ok end,     
+    
+    Children = supervisor:which_children({agents_sup, NodeL}),
+    io:format("~p", [Children]),
+    NewAgentPid = agent:introduce(Agent, NodeL),
+    true = is_pid(NewAgentPid),    
+    {value, {Agent, NewAgentPid, worker, [agent]}} = lists:keysearch(Agent, 1,
+                                                                     Children),
+    
+    %% stop the container application
+    ok = application:stop(container),
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+
+    ok.
+    
 

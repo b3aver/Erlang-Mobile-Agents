@@ -13,7 +13,8 @@
 %% API
 -export([start_link/0]).
 -export([start_agent/4,
-         start_agent/5]).
+         start_agent/5,
+         migrate/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -45,7 +46,12 @@ start_agent(ServerNode, Agent, Module, Function, Arguments) ->
                     {start_agent, Agent, Module, Function, Arguments}).
 
 
+migrate(Agent, Node, Function, Arguments) ->
+    gen_server:call(?SERVER, {migrate, Agent, Node, Function, Arguments}).
+
+
 %%%===================================================================
+
 %%% gen_server callbacks
 %%%===================================================================
 
@@ -96,7 +102,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
                                                           #agent.name,
                                                           OldAgents),
                         #state{agents=[#agent{name=Agent,
-                                              pid = AgentPid,
+                                              pid=AgentPid,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
@@ -107,7 +113,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
                                                           #agent.name,
                                                           OldAgents),
                         #state{agents=[#agent{name=Agent,
-                                              pid = AgentPid,
+                                              pid=AgentPid,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
@@ -126,7 +132,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
                 case Reply of
                     {ok, AgentPid} ->
                         #state{agents=[#agent{name=Agent,
-                                              pid = AgentPid,
+                                              pid=AgentPid,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
@@ -134,7 +140,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
                                        |OldAgents]};
                     {ok, AgentPid, _Info} ->
                         #state{agents=[#agent{name=Agent,
-                                              pid = AgentPid,
+                                              pid=AgentPid,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
@@ -145,6 +151,52 @@ handle_call({start_agent, Agent, Module, Function, Arguments},
                 end,
             {reply, Reply, NewState}
     end;
+
+
+handle_call({migrate, Agent, Node, Function, Arguments},
+            From,
+            OldState = #state{agents=OldAgents}) ->
+    %% lookfor agent stored informations: module, pid
+    case lists:keysearch(Agent, #agent.name, OldAgents) of
+        {value, AgentInfo} ->
+            AgentPid = AgentInfo#agent.pid,
+            FromPid = element(1, From),
+            %%io:format("DEBUG manager: ~p ~p ~p~n", [AgentInfo, AgentPid, FromPid]),
+            %% check the Pid
+            if 
+                AgentPid == FromPid ->
+                    Module = AgentInfo#agent.module,
+                    %% start Agent in Node
+                    case manager:start_agent(Node, Agent, Module,
+                                             Function, Arguments) of
+                        {ok, _NewPid} ->
+                            Reply = ok,
+                            %% change agent stored informations
+                            NewState = change_state_migrated(OldState, Agent),
+                            %% exit agent
+                            %% exit(AgentPid, migrated),
+                            ok;
+                        {ok, _NewPid, _Info} ->
+                            Reply = ok,
+                            %% change agent stored informations
+                            NewState = change_state_migrated(OldState, Agent),
+                            %% exit agent
+                            %% exit(AgentPid, migrated),
+                            ok;
+                        {error, _Error} ->
+                            Reply = {error, restart_error},
+                            NewState = OldState
+                    end;
+                true ->
+                    Reply = {error, forbidden},
+                    NewState = OldState
+            end;
+        false ->
+            Reply = {error, wrong_agent},
+            NewState = OldState 
+    end,
+
+    {reply, Reply, NewState};
 
 
 handle_call(_Request, _From, State) ->
@@ -207,3 +259,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+change_state_migrated(#state{agents=OldAgents}, Agent) ->
+    {value, AgentInfo} = lists:keysearch(Agent, #agent.name, OldAgents),
+    NewAgents = lists:keyreplace(Agent, #agent.name, OldAgents,
+                                 AgentInfo#agent{state=migrated,
+                                                 pid=undefined}),
+    _NewState = #state{agents=NewAgents}.

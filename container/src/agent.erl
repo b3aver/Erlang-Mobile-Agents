@@ -16,7 +16,9 @@
         introduce/1,
         introduce/2,
         stop/1,
-        stop/2]).
+        stop/2,
+        migrate/2,
+        migrate/3]).
 
 
 %% gen_server callbacks
@@ -40,14 +42,15 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
 start_link(Name) ->
     gen_server:start_link({local, Name}, ?MODULE, [], []).
+
 
 introduce(Name) ->
     gen_server:call(Name, introduce).
 introduce(Name, ServerNode) ->
     gen_server:call({Name, ServerNode}, introduce).
+
 
 stop(Name) ->
     gen_server:cast(Name, stop).
@@ -55,6 +58,11 @@ stop(Name, ServerNode) ->
     gen_server:cast({Name, ServerNode}, stop).
 
 
+migrate(Name, Node) ->
+    gen_server:call(Name, {migrate, Node}).
+migrate(Name, ServerNode, Node) ->
+    gen_server:call({Name, ServerNode}, {migrate, Node}).
+    
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -91,9 +99,23 @@ init([]) ->
 handle_call(introduce, _From, State) ->
     {reply, self(), State};
 
+
+handle_call({migrate, Node}, _From, State) ->
+    case process_info(self(), registered_name) of
+        {registered_name, Agent} ->
+            ok;
+        List ->
+            {value, {registerd_name, Agent}}
+                = lists:keysearch(registered_name, 1, List)
+    end,    
+    Reply = manager:migrate(Agent, Node, start_link, [Agent]),
+    {stop, normal, Reply, State};
+
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -107,6 +129,7 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast(stop, State) ->
     {stop, normal, State};
+
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
