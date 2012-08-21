@@ -13,7 +13,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--record(state, {}).
+-include("../src/agent.hrl").
 
 %%--------------------------------------------------------------------
 %% COMMON TEST CALLBACK FUNCTIONS
@@ -189,6 +189,8 @@ all() ->
      handle_call_case,
      handle_cast_unknown_command_case,
      handle_cast_stop_case,
+     handle_info_exit_case,
+     start_case,
      introduce1_case,
      introduce2_case,
      stop1_case,
@@ -244,20 +246,23 @@ start_stop_case(_Config) ->
     Pid = whereis(agent),
     true = erlang:is_process_alive(whereis(agent)),
     
-    % check start of another agent
-    {ok, Pid2} = agent:start_link(agent2),
+    % check start of another agent with an internal process
+    Time_to_live = 4,
+    {ok, Pid2} = agent:start_link(agent2, tester_agent, wait, [Time_to_live]),
     Pid2 = whereis(agent2),
     true = erlang:is_process_alive(whereis(agent2)),
-
+    receive after (1000*(Time_to_live+1)) -> nil end,
+    false = erlang:is_process_alive(Pid2),
+   
     % stop the processes
     agent:stop(agent),
     receive after 100 -> nil end,
     undefined = whereis(agent),
-    true = erlang:is_process_alive(whereis(agent2)),
-    agent:stop(agent2),
-    receive after 100 -> nil end,
-    undefined = whereis(agent),
-    undefined = whereis(agent2),
+    %% true = erlang:is_process_alive(whereis(agent2)),
+    %% agent:stop(agent2),
+    %% receive after 100 -> nil end,
+    %% undefined = whereis(agent),
+    %% undefined = whereis(agent2),
 
     ok.
 
@@ -265,14 +270,40 @@ start_stop_case(_Config) ->
 init_case(_Config) ->
     {ok, #state{}} = agent:init([]),
 
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
+    {ok, #state{module=Module, function=Function, arguments=Arguments, pid=Pid}} =
+        agent:init([Module, Function, Arguments]),
+    true = is_process_alive(Pid),
+
     ok.
+
     
 
 handle_call_case(_Config) ->
     Self = self(),
     {reply, Self, fake_state} = agent:handle_call(introduce, from, fake_state),
     {reply, ok, fake_state} = agent:handle_call(fake_command, from, fake_state),
+    
 
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
+    State = #state{module=Module},
+    %% process already running
+    {reply,
+     {error, already_running},
+     State
+    } = agent:handle_call({start, Module, Function, Arguments}, from, State),
+
+    %% start a new process
+    {reply,
+     ok,
+     #state{module=Module, function=Function, arguments=Arguments, pid=Pid}
+    } = agent:handle_call({start, Module, Function, Arguments}, from, #state{}),
+    true = is_process_alive(Pid),
+    
     ok.
 
 
@@ -284,6 +315,26 @@ handle_cast_unknown_command_case(_Config) ->
     
 handle_cast_stop_case(_Config) ->
     {stop, normal, fake_state} = agent:handle_cast(stop, fake_state),
+
+    ok.
+
+
+handle_info_exit_case(_Config) ->
+    Pid = pid,
+    Reason = normal,
+    State = #state{pid=Pid},
+    NewState = State#state{pid=undefined},
+    {stop, Reason, NewState} = agent:handle_info({'EXIT', Pid, Reason}, State),
+    
+    ok.
+
+
+
+start_case(_Config) ->
+    Agent = agent,
+    {ok, _AgentPid} = agent:start_link(Agent),
+    agent:start(Agent, tester_agent, wait, [10]),
+    agent:stop(Agent),
 
     ok.
 

@@ -13,12 +13,14 @@
 %% API
 -export([start_link/0]).
 -export([start_link/1,
-        introduce/1,
-        introduce/2,
-        stop/1,
-        stop/2,
-        migrate/2,
-        migrate/3]).
+         start_link/4,
+         start/4,
+         introduce/1,
+         introduce/2,
+         stop/1,
+         stop/2,
+         migrate/2,
+         migrate/3]).
 
 
 %% gen_server callbacks
@@ -27,7 +29,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {}).
+-include("agent.hrl").
 
 %%%===================================================================
 %%% API
@@ -44,6 +46,13 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 start_link(Name) ->
     gen_server:start_link({local, Name}, ?MODULE, [], []).
+start_link(Name, Module, Function, Arguments) ->
+    gen_server:start_link({local, Name}, ?MODULE,
+                          [Module, Function, Arguments], []).
+
+
+start(Name, Module, Function, Arguments) ->
+    gen_server:call(Name, {start, Module, Function, Arguments}).
 
 
 introduce(Name) ->
@@ -80,7 +89,14 @@ migrate(Name, ServerNode, Node) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    process_flag(trap_exit, true),
+    {ok, #state{}};
+
+init([Module, Function, Arguments]) ->
+    process_flag(trap_exit, true),
+    Pid = start_process(Module, Function, Arguments),
+    {ok, #state{module=Module, function=Function, arguments=Arguments, pid=Pid}}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -110,6 +126,22 @@ handle_call({migrate, Node}, _From, State) ->
     end,    
     Reply = manager:migrate(Agent, Node, start_link, [Agent]),
     {stop, normal, Reply, State};
+
+
+handle_call({start, Module, Function, Arguments}, _From,
+            #state{module=undefined} = State) ->
+    case start_process(Module, Function, Arguments) of
+        error -> 
+            Reply = {error, start},
+            NewState = State;
+        Pid -> 
+            Reply = ok,
+            NewState = #state{module=Module, function=Function,
+                              arguments=Arguments, pid=Pid}
+    end,
+    {reply, Reply, NewState};
+handle_call({start, _Module, _Function, _Arguments}, _From, State) ->
+    {reply, {error, already_running}, State};
 
 
 handle_call(_Request, _From, State) ->
@@ -144,6 +176,10 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({'EXIT', Pid, normal=Reason}, #state{pid=Pid}=State) ->
+    NewState = State#state{pid=undefined},
+    {stop, Reason, NewState};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -175,3 +211,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+start_process(Module, Function, Arguments) ->
+    spawn_link(Module, Function, Arguments).
