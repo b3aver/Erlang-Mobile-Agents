@@ -390,7 +390,7 @@ migrate1_case(_Config) ->
     %% start the container application locally
     ok = application:start(container),
     %% start an agent locally
-    {ok, AgentPid} = manager:start_agent(Agent, agent, start_link, [Agent]),
+    {ok, AgentPid} = manager:start_agent(Agent, tester_agent, wait, [10]),
     AgentPid = agent:introduce(Agent),
 
 
@@ -419,8 +419,8 @@ migrate1_case(_Config) ->
     io:format("~p", [Children]),
     NewAgentPid = agent:introduce(Agent, NodeL),
     true = is_pid(NewAgentPid),    
-    {value, {Agent, NewAgentPid, worker, [agent]}} = lists:keysearch(Agent, 1,
-                                                                     Children),
+    {value, {Agent, NewAgentPid, worker, [agent, tester_agent]}}
+        = lists:keysearch(Agent, 1, Children),
     
     %% stop the container application
     ok = application:stop(container),

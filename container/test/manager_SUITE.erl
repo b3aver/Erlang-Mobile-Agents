@@ -337,9 +337,9 @@ handle_call_start_agent_present_case(_Config) ->
     %% Agent present in the state but not running
     process_flag(trap_exit, true),
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [],
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
     OldState = #state{agents=[#agent{name=Agent,
                                     state=terminated}]},
     {ok, SupPid} = agents_sup:start_link(),
@@ -378,9 +378,9 @@ handle_call_start_agent_new_case(_Config) ->
     %% start_agent
     process_flag(trap_exit, true),
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [],
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
     OldState = #state{agents=[anything]},
     {ok, SupPid} = agents_sup:start_link(),
 
@@ -460,9 +460,9 @@ handle_call_migrate_start_error_case(_Config) ->
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
 
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [agent],
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
     AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
@@ -480,16 +480,15 @@ handle_call_migrate_start_error_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with the same name
-    case manager:start_agent(NodeL, Agent, agent, start_link, [agent]) of
+    case manager:start_agent(NodeL, Agent, tester_agent, wait, [10]) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
     end,
 
-    {reply, {error, restart_error}, State} = manager:handle_call({migrate, Agent,
-                                                                  NodeL, Function,
-                                                                  Arguments},
-                                                                 From, State),
+    {reply, {error, restart_error}, State}
+        = manager:handle_call({migrate, Agent, NodeL, Function, Arguments},
+                              From, State),
     
     %% stop the container application
     ok = rpc:call(NodeL, application, stop, [container]),
@@ -506,9 +505,9 @@ handle_call_migrate_no_errors_case(_Config) ->
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
 
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [agent],
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
     AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
@@ -526,7 +525,7 @@ handle_call_migrate_no_errors_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with a different name
-    case manager:start_agent(NodeL, agent2, agent, start_link, [agent2]) of
+    case manager:start_agent(NodeL, agent2, tester_agent, wait, [10]) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
@@ -544,7 +543,7 @@ handle_call_migrate_no_errors_case(_Config) ->
     true = is_pid(Pid),
     
     Children = supervisor:which_children({agents_sup, NodeL}),
-    {value, {Agent, Pid, worker, [Module]}} = lists:keysearch(Agent, 1, Children),
+    {value, {Agent, Pid, worker, [agent, Module]}} = lists:keysearch(Agent, 1, Children),
     
     %% stop the container application
     ok = rpc:call(NodeL, application, stop, [container]),
@@ -568,7 +567,7 @@ start_agent4_case(_Config) ->
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(Agent, agent, start_link, []),
+    Ret = manager:start_agent(Agent, tester_agent, wait, [10]),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
@@ -609,7 +608,7 @@ start_agent5_case(_Config) ->
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(node(), Agent, agent, start_link, []),
+    Ret = manager:start_agent(node(), Agent, tester_agent, wait, [10]),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
@@ -652,9 +651,9 @@ migrate_case(_Config) ->
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
 
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [agent],
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
 
     %% start the application container locally
     ok = application:start(container),
@@ -682,7 +681,8 @@ migrate_case(_Config) ->
     Pid = gen_server:call({agent, NodeL}, introduce),
     true = is_pid(Pid),
     Children = supervisor:which_children({agents_sup, NodeL}),
-    {value, {Agent, Pid, worker, [Module]}} = lists:keysearch(Agent, 1, Children),
+    {value, {Agent, Pid, worker, [agent, Module]}}
+        = lists:keysearch(Agent, 1, Children),
 
     %% the local agent is really terminated
     false = is_process_alive(AgentPid),

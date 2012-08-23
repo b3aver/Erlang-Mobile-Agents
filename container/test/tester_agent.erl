@@ -10,9 +10,16 @@
 
 -export([wait/1]).
 
+-define(AGENT_NAME, tester).
+
 
 wait(Sec) ->
     receive
     after (1000*Sec) ->
             ok
     end.
+
+
+
+init() ->
+    manager:start_agent(manager, ?AGENT_NAME).
