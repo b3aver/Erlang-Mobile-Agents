@@ -195,10 +195,12 @@ all() ->
      handle_call_migrate_different_pid_case,
      handle_call_migrate_start_error_case,
      handle_call_migrate_no_errors_case,
+     handle_call_get_module_local_case,
      handle_cast_case,
      start_agent4_case,
      start_agent5_case,
-     migrate_case].
+     migrate_case,
+     get_module_case].
 
 
 %%--------------------------------------------------------------------
@@ -552,6 +554,23 @@ handle_call_migrate_no_errors_case(_Config) ->
 
     ok.
 
+
+handle_call_get_module_local_case(_Config) ->
+    %% get_module
+    %% locally in the current node
+
+    %% nonexistent module
+    {reply, error, state}
+        = manager:handle_call({get_module, fake_module}, from, state),
+
+    %% exitent module
+    Module = tester_agent,
+    {Module, Code, _Filename} = code:get_object_code(Module),
+    {reply, Code, state}
+        = manager:handle_call({get_module, Module}, from, state),
+    
+    ok.
+
     
 handle_cast_case(_Config) ->
     {noreply, fake_state} = manager:handle_cast(fake_msg, fake_state),
@@ -695,3 +714,35 @@ migrate_case(_Config) ->
     
     ok.
 
+
+get_module_case(_Config) ->
+    %% get_module
+    %% with a remote node
+
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% load the binary of the module
+    Module = tester_agent,
+    {Module, Code, _Filename} = code:get_object_code(Module),
+    %% ask the module to the remote node
+    Code = manager:get_module(NodeL, Module),
+    
+    %% stop the container application
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+    
+    
+    ok.
+
+    

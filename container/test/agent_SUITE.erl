@@ -247,7 +247,7 @@ start_stop_case(_Config) ->
     true = erlang:is_process_alive(whereis(agent)),
     
     % check start of another agent with an internal process
-    Time_to_live = 4,
+    Time_to_live = 1,
     {ok, Pid2} = agent:start_link(agent2, tester_agent, wait, [Time_to_live]),
     Pid2 = whereis(agent2),
     true = erlang:is_process_alive(whereis(agent2)),

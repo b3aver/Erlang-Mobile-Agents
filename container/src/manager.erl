@@ -14,7 +14,8 @@
 -export([start_link/0]).
 -export([start_agent/4,
          start_agent/5,
-         migrate/4]).
+         migrate/4,
+         get_module/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,6 +49,10 @@ start_agent(ServerNode, Agent, Module, Function, Arguments) ->
 
 migrate(Agent, Node, Function, Arguments) ->
     gen_server:call(?SERVER, {migrate, Agent, Node, Function, Arguments}).
+
+
+get_module(ServerNode, Module) ->
+    gen_server:call({?SERVER, ServerNode}, {get_module, Module}).
 
 
 %%%===================================================================
@@ -197,6 +202,17 @@ handle_call({migrate, Agent, Node, Function, Arguments},
     end,
 
     {reply, Reply, NewState};
+
+
+handle_call({get_module, Module}, _From, State) ->
+    case code:get_object_code(Module) of
+        error ->
+            Reply = error;
+        {Module, Code, _Filename} ->
+            Reply = Code
+    end,
+    
+    {reply, Reply, State};
 
 
 handle_call(_Request, _From, State) ->
