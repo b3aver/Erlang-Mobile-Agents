@@ -14,6 +14,7 @@
 -export([start_link/0]).
 -export([start_agent/4,
          start_agent/5,
+         host_agent/5,
          migrate/4,
          get_module/2]).
 
@@ -51,6 +52,13 @@ migrate(Agent, Node, Function, Arguments) ->
     gen_server:call(?SERVER, {migrate, Agent, Node, Function, Arguments}).
 
 
+host_agent(ServerNode, Agent, Module, Function, Arguments) ->
+    gen_server:call({?SERVER, ServerNode},
+                    {host_agent, Agent, Module, Function, Arguments}).
+
+
+get_module(Manager, Module) when is_pid(Manager) ->
+    gen_server:call(Manager, {get_module, Module});
 get_module(ServerNode, Module) ->
     gen_server:call({?SERVER, ServerNode}, {get_module, Module}).
 
@@ -88,74 +96,32 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start_agent, Agent, Module, Function, Arguments},
-            _From,
-            OldState = #state{agents=OldAgents}) ->
-    case lists:keysearch(Agent, #agent.name, OldAgents) of
-        {value, #agent{state=running}} ->
-            %% there is an agent with the same name still_running
-            {reply, {error, still_running}, #state{agents=OldAgents}};
-        {value, _AgentRecord} ->
-            %% there is an agent with the same name but isn't running
-            %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
-            %% rebuild the gen_server state
-            NewState =
-                case Reply of
-                    {ok, AgentPid} ->
-                        OldAgentsPurged = lists:keydelete(Agent,
-                                                          #agent.name,
-                                                          OldAgents),
-                        #state{agents=[#agent{name=Agent,
-                                              pid=AgentPid,
-                                              module=Module,
-                                              function=Function,
-                                              arguments=Arguments,
-                                              state=running}
-                                       |OldAgentsPurged]};
-                    {ok, AgentPid, _Info} ->
-                        OldAgentsPurged = lists:keydelete(Agent,
-                                                          #agent.name,
-                                                          OldAgents),
-                        #state{agents=[#agent{name=Agent,
-                                              pid=AgentPid,
-                                              module=Module,
-                                              function=Function,
-                                              arguments=Arguments,
-                                              state=running}
-                                       |OldAgentsPurged]};
-                    {error, _Error} ->
-                        OldState
-                end,
-            {reply, Reply, NewState};
-        false ->
-            %% there aren't agents with this name
-            %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
-            %% rebuild the gen_server state
-            NewState =
-                case Reply of
-                    {ok, AgentPid} ->
-                        #state{agents=[#agent{name=Agent,
-                                              pid=AgentPid,
-                                              module=Module,
-                                              function=Function,
-                                              arguments=Arguments,
-                                              state=running}
-                                       |OldAgents]};
-                    {ok, AgentPid, _Info} ->
-                        #state{agents=[#agent{name=Agent,
-                                              pid=AgentPid,
-                                              module=Module,
-                                              function=Function,
-                                              arguments=Arguments,
-                                              state=running}
-                                       |OldAgents]};
-                    {error, _Error} ->
-                        OldState
-                end,
-            {reply, Reply, NewState}
-    end;
+handle_call({start_agent, Agent, Module, Function, Arguments}, _From, OldState) ->
+    {Reply, NewState}
+        = bootstrap_agent(Agent, Module, Function, Arguments, OldState),
+    {reply, Reply, NewState};
+
+
+handle_call({host_agent, Agent, Module, Function, Arguments},
+            {From, _Tag},
+            OldState) ->
+    case code:load_file(Module) of
+        {error, nofile} ->
+            Binary = manager:get_module(From, Module),
+            case code:load_binary(Module, "./tmp/"++atom_to_list(Module),Binary) of
+               {module, Module} ->
+                    {Reply, NewState} = bootstrap_agent(Agent, Module, Function,
+                                                        Arguments, OldState);
+               Error ->
+                    Reply = Error,
+                    NewState = OldState
+            end;
+        {module, Module} ->
+            {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
+                                                OldState)
+    end,
+        
+    {reply, Reply, NewState};
 
 
 handle_call({migrate, Agent, Node, Function, Arguments},
@@ -172,8 +138,8 @@ handle_call({migrate, Agent, Node, Function, Arguments},
                 AgentPid == FromPid ->
                     Module = AgentInfo#agent.module,
                     %% start Agent in Node
-                    case manager:start_agent(Node, Agent, Module,
-                                             Function, Arguments) of
+                    case manager:host_agent(Node, Agent, Module, 
+                                            Function, Arguments) of
                         {ok, _NewPid} ->
                             Reply = ok,
                             %% change agent stored informations
@@ -283,3 +249,72 @@ change_state_migrated(#state{agents=OldAgents}, Agent) ->
                                  AgentInfo#agent{state=migrated,
                                                  pid=undefined}),
     _NewState = #state{agents=NewAgents}.
+
+
+bootstrap_agent(Agent, Module, Function, Arguments,
+                OldState = #state{agents=OldAgents}) ->
+    case lists:keysearch(Agent, #agent.name, OldAgents) of
+        {value, #agent{state=running}} ->
+            %% there is an agent with the same name still_running
+            {{error, still_running}, #state{agents=OldAgents}};
+        {value, _AgentRecord} ->
+            %% there is an agent with the same name but isn't running
+            %% start the agent
+            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            %% rebuild the gen_server state
+            NewState =
+                case Reply of
+                    {ok, AgentPid} ->
+                        OldAgentsPurged = lists:keydelete(Agent,
+                                                          #agent.name,
+                                                          OldAgents),
+                        #state{agents=[#agent{name=Agent,
+                                              pid=AgentPid,
+                                              module=Module,
+                                              function=Function,
+                                              arguments=Arguments,
+                                              state=running}
+                                       |OldAgentsPurged]};
+                    {ok, AgentPid, _Info} ->
+                        OldAgentsPurged = lists:keydelete(Agent,
+                                                          #agent.name,
+                                                          OldAgents),
+                        #state{agents=[#agent{name=Agent,
+                                              pid=AgentPid,
+                                              module=Module,
+                                              function=Function,
+                                              arguments=Arguments,
+                                              state=running}
+                                       |OldAgentsPurged]};
+                    {error, _Error} ->
+                        OldState
+                end,
+            {Reply, NewState};
+        false ->
+            %% there aren't agents with this name
+            %% start the agent
+            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            %% rebuild the gen_server state
+            NewState =
+                case Reply of
+                    {ok, AgentPid} ->
+                        #state{agents=[#agent{name=Agent,
+                                              pid=AgentPid,
+                                              module=Module,
+                                              function=Function,
+                                              arguments=Arguments,
+                                              state=running}
+                                       |OldAgents]};
+                    {ok, AgentPid, _Info} ->
+                        #state{agents=[#agent{name=Agent,
+                                              pid=AgentPid,
+                                              module=Module,
+                                              function=Function,
+                                              arguments=Arguments,
+                                              state=running}
+                                       |OldAgents]};
+                    {error, _Error} ->
+                        OldState
+                end,
+            {Reply, NewState}
+    end.

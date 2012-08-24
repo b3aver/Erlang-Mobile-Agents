@@ -28,7 +28,7 @@ note over manager@node1: retrieves the Module of agent1
 ' manager@node1 -> platform@node0: lookfor_container(node2)
 ' platform@node0 -> manager@node1: manager@node2
 ' manager@node1 -> manager@node2: start_agent(agent1, Module, Function, Arguments)
-manager@node1 -> manager@node2: accommodate(agent1, Module, Function, Arguments)
+manager@node1 -> manager@node2: host_agent(agent1, Module, Function, Arguments)
 ' note over manager@node2: check if has got the Module of agent1
 group if manager@node2 hasn't got Module
   manager@node2 -> manager@node1: send_module(Module)
