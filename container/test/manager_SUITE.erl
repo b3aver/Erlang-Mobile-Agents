@@ -200,7 +200,8 @@ all() ->
      start_agent4_case,
      start_agent5_case,
      migrate_case,
-     get_module_case].
+     get_module_case,
+     get_module_pid_case].
 
 
 %%--------------------------------------------------------------------
@@ -718,7 +719,6 @@ migrate_case(_Config) ->
 get_module_case(_Config) ->
     %% get_module
     %% with a remote node
-
     Node = node,
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
     %% create another node running the container application
@@ -742,7 +742,38 @@ get_module_case(_Config) ->
     %% stop the container node
     ok = slave:stop(NodeL),
     
-    
     ok.
 
     
+get_module_pid_case(_Config) ->
+    %% get_module
+    %% with a remote node
+    %% passing the manager pid
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()), 
+    %% create another node running the container application
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+
+    %% retrieve the manager's pid
+    ManagerPid = rpc:call(NodeL, erlang, whereis, [manager]),
+    true = is_pid(ManagerPid),
+
+    %% load the binary of the module
+    Module = tester_agent,
+    {Module, Code, _Filename} = code:get_object_code(Module),
+    %% ask the module to the remote node
+    Code = manager:get_module(ManagerPid, Module),
+
+    %% stop the container application
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+    
+    ok.
