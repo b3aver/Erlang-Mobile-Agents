@@ -202,6 +202,7 @@ all() ->
      handle_cast_case,
      start_agent4_case,
      start_agent5_case,
+     host_agent_case,
      migrate_case,
      get_module_case,
      get_module_pid_case].
@@ -491,12 +492,8 @@ handle_call_host_agent_no_errors_case(_Config) ->
     %% retrieve the manager's pid
     ManagerPid = rpc:call(NodeL, erlang, whereis, [manager]),
     
-    State = #state{agents=[]},
-    %% NewState = #state{agents=[#agent{name=Agent, pid=FromPid, module=Module,
-    %%                                  function=Function, arguments=Arguments,
-    %%                                  state=running}]},
-    
     %% do the call
+    State = #state{agents=[]},    
     {reply, Ret, #state{agents=[#agent{name=Agent, pid=AgentPid, module=Module,
                                        function=Function, arguments=Arguments,
                                        state=running}]}}
@@ -514,7 +511,6 @@ handle_call_host_agent_no_errors_case(_Config) ->
     Children = supervisor:which_children(agents_sup),
     {value, {Agent, AgentPid, worker, [agent, Module]}}
         = lists:keysearch(Agent, 1, Children),
-    
 
     %% restore the original code search path
     code:add_pathsa(lists:reverse(CodePath)),
@@ -774,6 +770,47 @@ start_agent5_case(_Config) ->
         1000 -> exit(shutdown_error)
     end,
 
+    ok.
+
+
+host_agent_case(_Config) ->
+    Agent = agent,
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()),     
+
+    %% create another node running the container application
+    %% simulating the one that requires to host the agent
+    CodePath = code:get_path(),
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+    
+    %% do the call
+    Ret = manager:host_agent(NodeL, Agent, Module, Function, Arguments),
+    Children = supervisor:which_children({agents_sup, NodeL}),
+    case Ret of
+        {ok, AgentPid} ->
+            {value, {Agent, AgentPid, worker, [agent, Module]}}
+                = lists:keysearch(Agent, 1, Children);
+        {ok, AgentPid, _Info} ->
+            {value, {Agent, AgentPid, worker, [agent, Module]}}
+                = lists:keysearch(Agent, 1, Children);
+        {error, _Error} ->
+            exit(start_agent_error)
+    end,
+    
+    %% stop the container application
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
+    
     ok.
 
 
