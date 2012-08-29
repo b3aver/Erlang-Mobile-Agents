@@ -16,11 +16,8 @@
          start_link/4,
          start/4,
          introduce/1,
-         introduce/2,
          stop/1,
-         stop/2,
-         migrate/2,
-         migrate/3]).
+         migrate/2]).
 
 
 %% gen_server callbacks
@@ -57,20 +54,14 @@ start(Name, Module, Function, Arguments) ->
 
 introduce(Name) ->
     gen_server:call(Name, introduce).
-introduce(Name, ServerNode) ->
-    gen_server:call({Name, ServerNode}, introduce).
 
 
 stop(Name) ->
     gen_server:cast(Name, stop).
-stop(Name, ServerNode) ->
-    gen_server:cast({Name, ServerNode}, stop).
 
 
 migrate(Name, Node) ->
     gen_server:call(Name, {migrate, Node}).
-migrate(Name, ServerNode, Node) ->
-    gen_server:call({Name, ServerNode}, {migrate, Node}).
     
 
 %%%===================================================================

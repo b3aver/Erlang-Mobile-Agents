@@ -191,11 +191,9 @@ all() ->
      handle_cast_stop_case,
      handle_info_exit_case,
      start_case,
-     introduce1_case,
-     introduce2_case,
-     stop1_case,
-     stop2_case,
-     migrate1_case].
+     introduce_case,
+     stop_case,
+     migrate_case].
 
 
 %%--------------------------------------------------------------------
@@ -329,7 +327,9 @@ handle_info_exit_case(_Config) ->
     ok.
 
 
-
+%%
+%% API functions' tests
+%%
 start_case(_Config) ->
     Agent = agent,
     {ok, _AgentPid} = agent:start_link(Agent),
@@ -339,28 +339,21 @@ start_case(_Config) ->
     ok.
 
 
-introduce1_case(_Config) ->
+introduce_case(_Config) ->
     Agent = agent,
     {ok, AgentPid} = agent:start_link(Agent),
     AgentPid = agent:introduce(Agent),
-    agent:stop(Agent),
-
-    ok.
-
-
-introduce2_case(_Config) ->
-    Agent = agent,
-    {ok, AgentPid} = agent:start_link(Agent),
-    AgentPid = agent:introduce(Agent, node()),
+    AgentPid = agent:introduce({Agent, node()}),
     agent:stop(Agent),
 
     ok.
 
     
-stop1_case(_Config) ->
+stop_case(_Config) ->
     Agent = agent,
     {ok, AgentPid} = agent:start_link(Agent),
     ok = agent:stop(Agent),
+    %% ok = agent:stop({Agent, node()}),
 
     receive after 100 -> nill end,
     undefined = whereis(Agent),
@@ -369,19 +362,7 @@ stop1_case(_Config) ->
     ok.
 
 
-stop2_case(_Config) ->
-    Agent = agent,
-    {ok, AgentPid} = agent:start_link(Agent),
-    ok = agent:stop(Agent, node()),
-
-    receive after 100 -> nill end,
-    undefined = whereis(Agent),
-    false = is_process_alive(AgentPid),
-    
-    ok.
-
-
-migrate1_case(_Config) ->
+migrate_case(_Config) ->
     %% migrate
     Node = node,
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
@@ -417,7 +398,7 @@ migrate1_case(_Config) ->
     
     Children = supervisor:which_children({agents_sup, NodeL}),
     io:format("~p", [Children]),
-    NewAgentPid = agent:introduce(Agent, NodeL),
+    NewAgentPid = agent:introduce({Agent, NodeL}),
     true = is_pid(NewAgentPid),    
     {value, {Agent, NewAgentPid, worker, [agent, tester_agent]}}
         = lists:keysearch(Agent, 1, Children),
