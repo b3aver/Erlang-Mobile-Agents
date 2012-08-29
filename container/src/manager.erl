@@ -107,18 +107,26 @@ handle_call({host_agent, Agent, Module, Function, Arguments},
             OldState) ->
     case code:load_file(Module) of
         {error, nofile} ->
-            Binary = manager:get_module(From, Module),
-            case code:load_binary(Module, "./tmp/"++atom_to_list(Module),Binary) of
-               {module, Module} ->
-                    {Reply, NewState} = bootstrap_agent(Agent, Module, Function,
-                                                        Arguments, OldState);
-               Error ->
-                    Reply = Error,
-                    NewState = OldState
+            %% Binary = manager:get_module(From, Module),
+            case  manager:get_module(From, Module) of
+                error ->
+                    Reply = {error, load_module_error},
+                    NewState = OldState;
+                Binary ->
+                    case code:load_binary(Module, "./tmp/"++atom_to_list(Module),
+                                          Binary) of
+                        {module, Module} ->
+                            {Reply, NewState}
+                                = bootstrap_agent(Agent, Module, Function, 
+                                                  Arguments, OldState);
+                        Error ->
+                            Reply = Error,
+                            NewState = OldState
+                    end
             end;
         {module, Module} ->
-            {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
-                                                OldState)
+            {Reply, NewState}
+                = bootstrap_agent(Agent, Module, Function, Arguments, OldState)
     end,
         
     {reply, Reply, NewState};

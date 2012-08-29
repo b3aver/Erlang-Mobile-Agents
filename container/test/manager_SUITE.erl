@@ -191,6 +191,9 @@ all() ->
      handle_call_start_agent_running_case,
      handle_call_start_agent_present_case,
      handle_call_start_agent_new_case,
+     handle_call_host_agent_module_present_case,
+     handle_call_host_agent_transfer_error_case,
+     handle_call_host_agent_no_errors_case,
      handle_call_migrate_not_present_case,
      handle_call_migrate_different_pid_case,
      handle_call_migrate_start_error_case,
@@ -412,6 +415,116 @@ handle_call_start_agent_new_case(_Config) ->
     after
         1000 -> exit(shutdown_error)
     end,
+
+    ok.
+
+
+%%
+%% host_agent
+%%
+handle_call_host_agent_module_present_case(_Config) ->
+    %% host_agent
+    %% Module in the code search path
+    %% Agent present in the state and running
+    Agent = agent,
+    Module = agent,
+    Function = start_link,
+    Arguments = [],
+    State = #state{agents=[#agent{name=Agent,
+                                     state=running}]},
+
+    {reply, {error, still_running}, State}
+        = manager:handle_call({host_agent, Agent, Module, Function, Arguments},
+                              {from, tag}, State),
+
+    ok.
+
+
+handle_call_host_agent_transfer_error_case(_Config) ->
+    %% host_agent
+    %% Module is not in the code search path
+    %% nether in the manager that requires to host the agent.
+    Agent = agent,
+    Module = foo,
+    Function = bar,
+    Arguments = [],
+
+    %% start a manager simulating the one that requires to host the agent
+    {ok, ManagerPid} = manager:start_link(),
+    State = #state{},
+
+    {reply, {error, load_module_error}, State}
+        = manager:handle_call({host_agent, Agent, Module, Function, Arguments},
+                              {ManagerPid, tag}, State),
+
+    ok.
+
+
+handle_call_host_agent_no_errors_case(_Config) ->
+    %% host_agent
+    %% Module is not in the code search path
+    %% but it is in the manager that requires to host the agent.
+    Agent = agent,
+    Module = tester_agent,
+    Function = wait,
+    Arguments = [10],
+    Node = node,
+    NodeL = list_to_atom("node@"++net_adm:localhost()),     
+
+    ok = application:start(container),
+
+    %% save the original code search path
+    CodePath = code:get_path(),
+    %% remove the current directory
+    code:del_path(test),
+    
+    %% create another node running the container application
+    %% simulating the one that requires to host the agent
+    Args = "-pa "++lists:nth(3, CodePath)
+        ++" "++lists:nth(2, CodePath)
+        ++" "++lists:nth(1, CodePath),
+    {ok, NodeL} = slave:start(net_adm:localhost(), Node, Args),
+    pong = net_adm:ping(NodeL),
+    %% start the container application
+    ok = rpc:call(NodeL, application, start, [container]),
+    
+    %% retrieve the manager's pid
+    ManagerPid = rpc:call(NodeL, erlang, whereis, [manager]),
+    
+    State = #state{agents=[]},
+    %% NewState = #state{agents=[#agent{name=Agent, pid=FromPid, module=Module,
+    %%                                  function=Function, arguments=Arguments,
+    %%                                  state=running}]},
+    
+    %% do the call
+    {reply, Ret, #state{agents=[#agent{name=Agent, pid=AgentPid, module=Module,
+                                       function=Function, arguments=Arguments,
+                                       state=running}]}}
+        = manager:handle_call({host_agent, Agent, Module, Function, Arguments},
+                              {ManagerPid, tag}, State),
+    case Ret of
+        {ok, AgentPid} ->
+            ok;
+        {ok, AgentPid, _Info} ->
+            ok;
+        {error, _Error} ->
+            exit(start_agent_error)
+    end,
+    
+    Children = supervisor:which_children(agents_sup),
+    {value, {Agent, AgentPid, worker, [agent, Module]}}
+        = lists:keysearch(Agent, 1, Children),
+    
+
+    %% restore the original code search path
+    code:add_pathsa(lists:reverse(CodePath)),
+    CodePath = code:get_path(),
+
+    %% stop the container application
+    ok = application:stop(container),
+    ok = rpc:call(NodeL, application, stop, [container]),
+    %% stop the container node
+    ok = slave:stop(NodeL),
 
     ok.
 
