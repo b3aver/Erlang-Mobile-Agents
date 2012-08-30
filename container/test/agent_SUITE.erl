@@ -371,7 +371,7 @@ migrate_case(_Config) ->
     %% start the container application locally
     ok = application:start(container),
     %% start an agent locally
-    {ok, AgentPid} = manager:start_agent(Agent, tester_agent, wait, [10]),
+    {ok, AgentPid} = manager:start_agent(Agent, tester_agent, wait, [10], []),
     AgentPid = agent:introduce(Agent),
 
 

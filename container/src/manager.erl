@@ -12,8 +12,8 @@
 
 %% API
 -export([start_link/0]).
--export([start_agent/4,
-         start_agent/5,
+-export([start_agent/5,
+         start_agent/6,
          host_agent/5,
          migrate/4,
          get_module/2]).
@@ -41,11 +41,12 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
-start_agent(Agent, Module, Function, Arguments) ->
-    gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments}).
-start_agent(ServerNode, Agent, Module, Function, Arguments) ->
-    gen_server:call({?SERVER, ServerNode},
-                    {start_agent, Agent, Module, Function, Arguments}).
+start_agent(Agent, Module, Function, Arguments, Dependencies) ->
+    gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments,
+                              Dependencies}).
+start_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
+    gen_server:call({?SERVER, ServerNode}, {start_agent, Agent, Module, Function,
+                                            Arguments, Dependencies}).
 
 
 migrate(Agent, Node, Function, Arguments) ->
@@ -96,9 +97,10 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start_agent, Agent, Module, Function, Arguments}, _From, OldState) ->
-    {Reply, NewState}
-        = bootstrap_agent(Agent, Module, Function, Arguments, OldState),
+handle_call({start_agent, Agent, Module, Function, Arguments, Dependencies},
+            _From, OldState) ->
+    {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
+                                        Dependencies, OldState),
     {reply, Reply, NewState};
 
 
@@ -118,7 +120,7 @@ handle_call({host_agent, Agent, Module, Function, Arguments},
                         {module, Module} ->
                             {Reply, NewState}
                                 = bootstrap_agent(Agent, Module, Function, 
-                                                  Arguments, OldState);
+                                                  Arguments, [], OldState);
                         Error ->
                             Reply = Error,
                             NewState = OldState
@@ -126,7 +128,8 @@ handle_call({host_agent, Agent, Module, Function, Arguments},
             end;
         {module, Module} ->
             {Reply, NewState}
-                = bootstrap_agent(Agent, Module, Function, Arguments, OldState)
+                = bootstrap_agent(Agent, Module, Function, Arguments, [],
+                                  OldState)
     end,
         
     {reply, Reply, NewState};
@@ -259,7 +262,7 @@ change_state_migrated(#state{agents=OldAgents}, Agent) ->
     _NewState = #state{agents=NewAgents}.
 
 
-bootstrap_agent(Agent, Module, Function, Arguments,
+bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
                 OldState = #state{agents=OldAgents}) ->
     case lists:keysearch(Agent, #agent.name, OldAgents) of
         {value, #agent{state=running}} ->
@@ -281,6 +284,7 @@ bootstrap_agent(Agent, Module, Function, Arguments,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
+                                              dependencies=Dependencies,
                                               state=running}
                                        |OldAgentsPurged]};
                     {ok, AgentPid, _Info} ->
@@ -292,6 +296,7 @@ bootstrap_agent(Agent, Module, Function, Arguments,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
+                                              dependencies=Dependencies,
                                               state=running}
                                        |OldAgentsPurged]};
                     {error, _Error} ->
@@ -311,6 +316,7 @@ bootstrap_agent(Agent, Module, Function, Arguments,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
+                                              dependencies=Dependencies,
                                               state=running}
                                        |OldAgents]};
                     {ok, AgentPid, _Info} ->
@@ -319,6 +325,7 @@ bootstrap_agent(Agent, Module, Function, Arguments,
                                               module=Module,
                                               function=Function,
                                               arguments=Arguments,
+                                              dependencies=Dependencies,
                                               state=running}
                                        |OldAgents]};
                     {error, _Error} ->

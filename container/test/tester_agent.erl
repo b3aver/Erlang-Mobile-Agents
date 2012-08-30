@@ -22,4 +22,5 @@ wait(Sec) ->
 
 
 init() ->
-    manager:start_agent(manager, ?AGENT_NAME).
+    %% manager:start_agent(manager, ?AGENT_NAME).
+    ok.

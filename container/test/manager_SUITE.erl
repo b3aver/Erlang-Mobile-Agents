@@ -327,14 +327,12 @@ handle_call_start_agent_running_case(_Config) ->
     Module = agent,
     Function = start_link,
     Arguments = [],
+    Dependencies = [gen_server],
     State = #state{agents=[#agent{name=Agent,
                                      state=running}]},
-    {reply, {error, still_running}, State} = manager:handle_call({start_agent,
-                                                                  Agent,
-                                                                  Module,
-                                                                  Function,
-                                                                  Arguments},
-                                                                 from, State),
+    {reply, {error, still_running}, State}
+        = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
+                               Dependencies}, from, State),
     
     ok.
     
@@ -347,6 +345,7 @@ handle_call_start_agent_present_case(_Config) ->
     Module = tester_agent,
     Function = wait,
     Arguments = [10],
+    Dependencies = [],
     OldState = #state{agents=[#agent{name=Agent,
                                     state=terminated}]},
     {ok, SupPid} = agents_sup:start_link(),
@@ -356,10 +355,10 @@ handle_call_start_agent_present_case(_Config) ->
                                        module=Module,
                                        function=Function,
                                        arguments=Arguments,
+                                       dependencies=Dependencies,
                                        state=running}]}
-    } = manager:handle_call({start_agent, Agent,
-                             Module, Function,Arguments},
-                            from, OldState),
+    } = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
+                             Dependencies}, from, OldState),
     case Ret of
         {ok, AgentPid} ->
             ok;
@@ -388,6 +387,7 @@ handle_call_start_agent_new_case(_Config) ->
     Module = tester_agent,
     Function = wait,
     Arguments = [10],
+    Dependencies = [],
     OldState = #state{agents=[anything]},
     {ok, SupPid} = agents_sup:start_link(),
 
@@ -396,10 +396,10 @@ handle_call_start_agent_new_case(_Config) ->
                                        module=Module,
                                        function=Function,
                                        arguments=Arguments,
+                                       dependencies=Dependencies,
                                        state=running}|[anything]]}
-    } = manager:handle_call({start_agent, Agent,
-                             Module, Function,Arguments},
-                            from, OldState),
+    } = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
+                             Dependencies}, from, OldState),
     case Ret of
         {ok, AgentPid} ->
             ok;
@@ -592,7 +592,7 @@ handle_call_migrate_start_error_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with the same name
-    case manager:start_agent(NodeL, Agent, tester_agent, wait, [10]) of
+    case manager:start_agent(NodeL, Agent, tester_agent, wait, [10], []) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
@@ -637,7 +637,7 @@ handle_call_migrate_no_errors_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with a different name
-    case manager:start_agent(NodeL, agent2, tester_agent, wait, [10]) of
+    case manager:start_agent(NodeL, agent2, tester_agent, wait, [10], []) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
@@ -696,7 +696,7 @@ start_agent4_case(_Config) ->
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(Agent, tester_agent, wait, [10]),
+    Ret = manager:start_agent(Agent, tester_agent, wait, [10], []),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
@@ -737,7 +737,7 @@ start_agent5_case(_Config) ->
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(node(), Agent, tester_agent, wait, [10]),
+    Ret = manager:start_agent(node(), Agent, tester_agent, wait, [10], []),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
@@ -828,7 +828,7 @@ migrate_case(_Config) ->
     %% start the application container locally
     ok = application:start(container),
     %% start an agent in the current node
-    AgentPid = case manager:start_agent(Agent, Module, Function, Arguments) of
+    AgentPid = case manager:start_agent(Agent, Module, Function, Arguments, []) of
                    {ok, APid} -> APid;
                    {ok, APid, _Info} -> APid;
                    {error, _Error} -> APid = error, exit(start_agent_error)
