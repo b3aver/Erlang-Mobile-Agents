@@ -10,9 +10,9 @@
 '-------------------------------------------------------------------
 
 @startuml img/sequence_start_agents.png
-[-> manager@node1: start_agent(agent1, Module, Function, Arguments)
+[-> manager@node1: start_agent(agent1, Module, Function, Arguments, Dependencies)
 'manager@node1 -> manager@node1: register(agent1)
-note over manager@node1: register(agent1)
+note over manager@node1: save agent1's informations \nin the internal state
 manager@node1 -> agents_sup@node1: start_agent(agent1, Module, Function, Arguments)
 create agent1@node1
 agents_sup@node1 -> agent1@node1: Module:Function(Arguments)
@@ -24,18 +24,20 @@ note left agent1@node1: agent1 now runs on node1
 activate agent1@node1 
 ' [-> agent1@node1: migrate(Node2, Function, Arguments)
 agent1@node1 -> manager@node1: migrate(agent1, node2, Function, Arguments)
-note over manager@node1: retrieves the Module of agent1
+note over manager@node1: retrieves Module and Dependencies of agent1
 ' manager@node1 -> platform@node0: lookfor_container(node2)
 ' platform@node0 -> manager@node1: manager@node2
 ' manager@node1 -> manager@node2: start_agent(agent1, Module, Function, Arguments)
-manager@node1 -> manager@node2: host_agent(agent1, Module, Function, Arguments)
-' note over manager@node2: check if has got the Module of agent1
-group if manager@node2 hasn't got Module
-  manager@node2 -> manager@node1: send_module(Module)
-  activate manager@node1   
-  manager@node1 -> manager@node2: <<Module>>
-  deactivate manager@node1
+manager@node1 -> manager@node2: host_agent(agent1, Module, Function,\n                Arguments, Dependencies)
+group foreach Mod in [Module|Dependencies]
+  group if manager@node2 hasn't got Mod
+    manager@node2 -> manager@node1: get_module(Mod)
+    activate manager@node1   
+    manager@node1 -> manager@node2: <<Mod>>
+    deactivate manager@node1
+  end
 end
+note over manager@node2: save agent1's informations \nin the internal state
 manager@node2 -> agents_sup@node2: start_agent(agent1, Module, Function, Arguments)
 create agent1@node2
 agents_sup@node2 -> agent1@node2: Module:Function(Arguments)
