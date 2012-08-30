@@ -104,35 +104,22 @@ handle_call({start_agent, Agent, Module, Function, Arguments, Dependencies},
     {reply, Reply, NewState};
 
 
+handle_call({host_agent, _A, _M, _F, _A, Dependencies}, _From, OldState)
+  when not(is_list(Dependencies)) ->
+    {reply, {error, bad_args}, OldState};
 handle_call({host_agent, Agent, Module, Function, Arguments, Dependencies},
             {From, _Tag},
             OldState) ->
-    case code:load_file(Module) of
-        {error, nofile} ->
-            %% Binary = manager:get_module(From, Module),
-            case  manager:get_module(From, Module) of
-                error ->
-                    Reply = {error, load_module_error},
-                    NewState = OldState;
-                Binary ->
-                    case code:load_binary(Module, "./tmp/"++atom_to_list(Module),
-                                          Binary) of
-                        {module, Module} ->
-                            {Reply, NewState}
-                                = bootstrap_agent(Agent, Module, Function,
-                                                  Arguments, Dependencies,
-                                                  OldState);
-                        Error ->
-                            Reply = Error,
-                            NewState = OldState
-                    end
-            end;
-        {module, Module} ->
+    case load_modules(From, [Module|Dependencies]) of
+        ok ->
             {Reply, NewState}
-                = bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
-                                  OldState)
+                = bootstrap_agent(Agent, Module, Function, Arguments,
+                                  Dependencies, OldState);
+        Error ->
+            Reply = Error,
+            NewState = OldState
     end,
-        
+    
     {reply, Reply, NewState};
 
 
@@ -330,3 +317,29 @@ bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
                 end,
             {Reply, NewState}
     end.
+
+
+load_modules(_From, []) ->
+    ok;
+load_modules(From, [Module|Rest]) ->
+    case code:load_file(Module) of
+        {module, Module} ->
+            Reply = load_modules(From, Rest);
+        {error, sticky_directory} ->
+            Reply = load_modules(From, Rest);
+        {error, nofile} ->
+            case  manager:get_module(From, Module) of
+                error ->
+                    Reply = {error, load_module_error};
+                Binary ->
+                    case code:load_binary(Module, "./tmp/"++atom_to_list(Module),
+                                          Binary) of
+                        {module, Module} ->
+                            Reply = load_modules(From, Rest);
+                        Error ->
+                            Reply = Error
+                    end
+            end
+    end,
+        
+    Reply.

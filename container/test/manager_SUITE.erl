@@ -579,10 +579,12 @@ handle_call_migrate_start_error_case(_Config) ->
     Module = tester_agent,
     Function = wait,
     Arguments = [10],
+    Dependencies = [],
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
     AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
-                       arguments=Arguments, state=running},
+                       arguments=Arguments, dependencies=Dependencies,
+                       state=running},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
 
     %% create another node running the container application
@@ -624,10 +626,12 @@ handle_call_migrate_no_errors_case(_Config) ->
     Module = tester_agent,
     Function = wait,
     Arguments = [10],
+    Dependencies = [],
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
     AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
-                       arguments=Arguments, state=running},
+                       arguments=Arguments, dependencies=Dependencies,
+                       state=running},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
 
     %% create another node running the container application
@@ -782,7 +786,7 @@ host_agent_case(_Config) ->
     Module = tester_agent,
     Function = wait,
     Arguments = [10],
-    Dependencies = [],
+    Dependencies = [erlang, code],
     Node = node,
     NodeL = list_to_atom("node@"++net_adm:localhost()),     
 
