@@ -14,7 +14,7 @@
 -export([start_link/0]).
 -export([start_agent/5,
          start_agent/6,
-         host_agent/5,
+         host_agent/6,
          migrate/4,
          get_module/2]).
 
@@ -53,9 +53,9 @@ migrate(Agent, Node, Function, Arguments) ->
     gen_server:call(?SERVER, {migrate, Agent, Node, Function, Arguments}).
 
 
-host_agent(ServerNode, Agent, Module, Function, Arguments) ->
-    gen_server:call({?SERVER, ServerNode},
-                    {host_agent, Agent, Module, Function, Arguments}).
+host_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
+    gen_server:call({?SERVER, ServerNode}, {host_agent, Agent, Module, Function,
+                                            Arguments, Dependencies}).
 
 
 get_module(Manager, Module) when is_pid(Manager) ->
@@ -104,7 +104,7 @@ handle_call({start_agent, Agent, Module, Function, Arguments, Dependencies},
     {reply, Reply, NewState};
 
 
-handle_call({host_agent, Agent, Module, Function, Arguments},
+handle_call({host_agent, Agent, Module, Function, Arguments, Dependencies},
             {From, _Tag},
             OldState) ->
     case code:load_file(Module) of
@@ -119,8 +119,9 @@ handle_call({host_agent, Agent, Module, Function, Arguments},
                                           Binary) of
                         {module, Module} ->
                             {Reply, NewState}
-                                = bootstrap_agent(Agent, Module, Function, 
-                                                  Arguments, [], OldState);
+                                = bootstrap_agent(Agent, Module, Function,
+                                                  Arguments, Dependencies,
+                                                  OldState);
                         Error ->
                             Reply = Error,
                             NewState = OldState
@@ -128,7 +129,7 @@ handle_call({host_agent, Agent, Module, Function, Arguments},
             end;
         {module, Module} ->
             {Reply, NewState}
-                = bootstrap_agent(Agent, Module, Function, Arguments, [],
+                = bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
                                   OldState)
     end,
         
@@ -143,27 +144,23 @@ handle_call({migrate, Agent, Node, Function, Arguments},
         {value, AgentInfo} ->
             AgentPid = AgentInfo#agent.pid,
             FromPid = element(1, From),
-            %%io:format("DEBUG manager: ~p ~p ~p~n", [AgentInfo, AgentPid, FromPid]),
             %% check the Pid
             if 
                 AgentPid == FromPid ->
                     Module = AgentInfo#agent.module,
+                    Dependencies = AgentInfo#agent.dependencies,
                     %% start Agent in Node
                     case manager:host_agent(Node, Agent, Module, 
-                                            Function, Arguments) of
+                                            Function, Arguments, Dependencies) of
                         {ok, _NewPid} ->
                             Reply = ok,
                             %% change agent stored informations
                             NewState = change_state_migrated(OldState, Agent),
-                            %% exit agent
-                            %% exit(AgentPid, migrated),
                             ok;
                         {ok, _NewPid, _Info} ->
                             Reply = ok,
                             %% change agent stored informations
                             NewState = change_state_migrated(OldState, Agent),
-                            %% exit agent
-                            %% exit(AgentPid, migrated),
                             ok;
                         {error, _Error} ->
                             Reply = {error, restart_error},
