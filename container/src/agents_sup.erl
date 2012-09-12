@@ -35,7 +35,7 @@ start_link() ->
 
 
 start_agent(Agent, Module, Function, Arguments) ->
-    Restart = transient, %% restarted only if terminate abnormally
+    Restart = temporary, %% never restart
     Shutdown = 2000,
     Type = worker,
     %% supervisor:start_child(?SERVER, {Agent, {Module, Function, Arguments},

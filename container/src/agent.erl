@@ -116,7 +116,7 @@ handle_call({migrate, Node}, _From, State) ->
                 = lists:keysearch(registered_name, 1, List)
     end,    
     Reply = manager:migrate(Agent, Node, start_link, [Agent]),
-    {stop, normal, Reply, State};
+    {stop, migrated, Reply, State};
 
 
 handle_call({start, Module, Function, Arguments}, _From,

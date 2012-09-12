@@ -303,14 +303,12 @@ start_agent_case(_Config) ->
     % check stop of the agent
     gen_server:cast(agent1, stop),
     receive after 100 -> nil end, % wait a while
-    % check if old processe are dead
+    % check if old process are dead
     false = erlang:is_process_alive(Agent1Pid),
     true = erlang:is_process_alive(Agent2Pid),
     % check if agents restart (the don't)
     Children2 = supervisor:which_children(agents_sup),
-    {agent1, Agent1Pid2, worker, [agent, Module]}
-        = lists:keyfind(agent1, 1, Children2),
-    true = Agent1Pid2 == undefined,
+    false = lists:keyfind(agent1, 1, Children2),
     {agent2, Agent2Pid, worker, [agent, Module]}
         = lists:keyfind(agent2, 1, Children2),
     

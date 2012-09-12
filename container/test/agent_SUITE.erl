@@ -392,12 +392,12 @@ migrate_case(_Config) ->
     %% migrate the Agent to Node
     ok = agent:migrate(Agent, NodeL),
     receive after 100 -> ok end,
+    undefined = whereis(Agent),
     false = is_process_alive(AgentPid),
 
     %% receive after 5000 -> ok end,     
     
     Children = supervisor:which_children({agents_sup, NodeL}),
-    io:format("~p", [Children]),
     NewAgentPid = agent:introduce({Agent, NodeL}),
     true = is_pid(NewAgentPid),    
     {value, {Agent, NewAgentPid, worker, [agent, tester_agent]}}
