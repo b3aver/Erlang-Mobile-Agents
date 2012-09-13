@@ -8,10 +8,19 @@
 %%%-------------------------------------------------------------------
 -module(tester_agent).
 
+-behaviour(agent).
+
+%% agent callbacks
+-export([used_modules/0, init/1, handle_migrate/1, handle_crash/1]}.
+
 -export([wait/1]).
 
 -define(AGENT_NAME, tester).
 
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 wait(Sec) ->
     receive
@@ -19,8 +28,23 @@ wait(Sec) ->
             ok
     end.
 
+%%%===================================================================
+%%% agent callbacks
+%%%===================================================================
+
+used_modules() ->
+    [erlang].
 
 
-init() ->
-    %% manager:start_agent(manager, ?AGENT_NAME).
+init([Sec]) ->
+    wait(Sec);
+init([]) ->
+    wait(10).
+
+
+handle_migrate(State) ->
+    ok.
+
+
+handle_crash(State) ->
     ok.

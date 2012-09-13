@@ -10,9 +10,12 @@
 
 -behaviour(gen_server).
 
+%% behavour definition
+-export([behaviour_info/1]).
+
 %% API
--export([start_link/0]).
--export([start_link/1,
+-export([start_link/0,
+         start_link/1,
          start_link/4,
          start/4,
          introduce/1,
@@ -27,6 +30,20 @@
 -define(SERVER, ?MODULE). 
 
 -include("agent.hrl").
+
+
+%%%===================================================================
+%%% Behaviour definition
+%%%===================================================================
+
+behaviour_info(callbacks) ->
+    [{used_modules,0},
+     {init, 1},
+     {handle_migrate, 1},
+     {handle_crash, 1}];
+behaviour_info(_Other) ->
+    undefined.
+
 
 %%%===================================================================
 %%% API
@@ -97,6 +114,7 @@ init([Module, Function, Arguments]) ->
 %% @spec handle_call(Request, From, State) ->
 %%                                   {reply, Reply, State} |
 %%                                   {reply, Reply, State, Timeout} |
+
 %%                                   {noreply, State} |
 %%                                   {noreply, State, Timeout} |
 %%                                   {stop, Reason, Reply, State} |
