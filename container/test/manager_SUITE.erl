@@ -200,6 +200,7 @@ all() ->
      handle_call_migrate_no_errors_case,
      handle_call_get_module_local_case,
      handle_cast_case,
+     handle_info_case,
      start_agent4_case,
      start_agent5_case,
      host_agent_case,
@@ -692,6 +693,30 @@ handle_call_get_module_local_case(_Config) ->
     
 handle_cast_case(_Config) ->
     {noreply, fake_state} = manager:handle_cast(fake_msg, fake_state),
+
+    ok.
+
+
+handle_info_case(_Config) ->
+    %% process termination case
+    Agent = agent,
+    Node = node(),
+    Reference = ref,
+
+    AgentInfo = #agent{name=Agent, state=running},
+    OldState = #state{agents=[AgentInfo]},
+    NewState = #state{agents=[AgentInfo#agent{state=terminated}]},
+        
+    %% agent present
+    Msg1 = {'DOWN', Reference, process, {Agent, Node}, normal},
+    {noreply, NewState} = manager:handle_info(Msg1, OldState),
+    
+    %% agent not present, no changes
+    Msg2 = {'DOWN', Reference, process, {fake_agent, Node}, normal},
+    {noreply, OldState} = manager:handle_info(Msg2, OldState),
+
+    %% default case
+    {noreply, fake_state} = manager:handle_info(fake_info, fake_state),
 
     ok.
 

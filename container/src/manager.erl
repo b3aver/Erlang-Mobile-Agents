@@ -205,6 +205,16 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({'DOWN', _Reference, process, {Agent, _Node}, normal},
+            OldState = #state{agents=OldAgents}) ->
+    case lists:keysearch(Agent, #agent.name, OldAgents) of
+        {value, _AgentInfo} ->
+            NewState = change_state_terminated(OldState, Agent);
+        false ->
+            NewState = OldState
+    end,
+    {noreply, NewState};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -236,14 +246,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+change_state_terminated(State, Agent) ->
+    change_state(State, Agent, terminated).
 
+change_state_migrated(State, Agent) ->
+    change_state(State, Agent, migrated).
 
-change_state_migrated(#state{agents=OldAgents}, Agent) ->
+change_state(#state{agents=OldAgents}, Agent, Status) ->
     {value, AgentInfo} = lists:keysearch(Agent, #agent.name, OldAgents),
     NewAgents = lists:keyreplace(Agent, #agent.name, OldAgents,
-                                 AgentInfo#agent{state=migrated,
+                                 AgentInfo#agent{state=Status,
                                                  pid=undefined}),
     _NewState = #state{agents=NewAgents}.
+
 
 
 bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
@@ -260,6 +275,7 @@ bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
             NewState =
                 case Reply of
                     {ok, AgentPid} ->
+                        _Reference = erlang:monitor(process, Agent),
                         OldAgentsPurged = lists:keydelete(Agent,
                                                           #agent.name,
                                                           OldAgents),
@@ -272,6 +288,7 @@ bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
                                               state=running}
                                        |OldAgentsPurged]};
                     {ok, AgentPid, _Info} ->
+                        _Reference = erlang:monitor(process, Agent),
                         OldAgentsPurged = lists:keydelete(Agent,
                                                           #agent.name,
                                                           OldAgents),

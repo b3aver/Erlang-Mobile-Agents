@@ -56,3 +56,17 @@ container@node1 -> platform@node0: register(ContainerPid)
 note over platform@node0:  db_insert(ContainerPid)\nplatform save ContainerPid
 platform@node0 -> container@node1: ok
 @enduml
+
+
+@startuml img/sequence_agent_normal_termination.png
+activate agent_loop
+activate agent
+activate manager
+agent_loop --> agent: {'EXIT', pid, normal}
+destroy agent_loop
+agent -> agent: handle_info -> {stop, normal, NewState}
+destroy agent
+agent --> manager: {'DOWN', Reference, process, Pid, normal}
+manager -> manager: handle_info
+note right manager: in State manager sets agent as terminated
+@enduml
