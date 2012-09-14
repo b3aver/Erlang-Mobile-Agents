@@ -36,7 +36,7 @@
 behaviour_info(callbacks) ->
     [{used_modules,0},
      {init, 1},
-     {handle_migrate, 1},
+     {handle_migration, 1},
      {handle_crash, 1}];
 behaviour_info(_Other) ->
     undefined.

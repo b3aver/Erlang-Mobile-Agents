@@ -11,7 +11,7 @@
 -behaviour(agent).
 
 %% agent callbacks
--export([used_modules/0, init/1, handle_migrate/1, handle_crash/1]).
+-export([used_modules/0, init/1, handle_migration/1, handle_crash/1]).
 
 %% API
 -export([start_link/2,
@@ -49,7 +49,7 @@ init([]) ->
     ?MODULE:wait(10).
 
 
-handle_migrate(_State) ->
+handle_migration(_State) ->
     ok.
 
 
