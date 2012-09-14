@@ -12,8 +12,8 @@
 
 %% API
 -export([start_link/0]).
--export([start_agent/5,
-         start_agent/6,
+-export([start_agent/3,
+         start_agent/4,
          host_agent/6,
          migrate/4,
          get_module/2]).
@@ -41,12 +41,17 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
-start_agent(Agent, Module, Function, Arguments, Dependencies) ->
-    gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments,
-                              Dependencies}).
-start_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
-    gen_server:call({?SERVER, ServerNode}, {start_agent, Agent, Module, Function,
-                                            Arguments, Dependencies}).
+%% start_agent(Agent, Module, Function, Arguments, Dependencies) ->
+%%     gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments,
+%%                               Dependencies}).
+%% start_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
+%%     gen_server:call({?SERVER, ServerNode}, {start_agent, Agent, Module, Function,
+%%                                             Arguments, Dependencies}).
+start_agent(Agent, Module, Arguments) ->
+    gen_server:call(?SERVER, {start_agent, Agent, Module, Arguments}).
+start_agent(ServerNode, Agent, Module, Arguments) ->
+    gen_server:call({?SERVER, ServerNode},
+                    {start_agent, Agent, Module, Arguments}).
 
 
 migrate(Agent, Node, Function, Arguments) ->
@@ -97,10 +102,13 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start_agent, Agent, Module, Function, Arguments, Dependencies},
-            _From, OldState) ->
-    {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
-                                        Dependencies, OldState),
+handle_call({start_agent, Agent, Module, Arguments}, _From, OldState) ->
+    %% Function = start_link,
+    %% Dependencies = Module:used_modules(),
+    %% {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
+    %%                                     Dependencies, OldState),
+    {Reply, NewState} = bootstrap_agent(Agent, Module, Arguments, OldState),
+
     {reply, Reply, NewState};
 
 
@@ -113,8 +121,9 @@ handle_call({host_agent, Agent, Module, Function, Arguments, Dependencies},
     case load_modules(From, [Module|Dependencies]) of
         ok ->
             {Reply, NewState}
-                = bootstrap_agent(Agent, Module, Function, Arguments,
-                                  Dependencies, OldState);
+                %% = bootstrap_agent(Agent, Module, Function, Arguments,
+                %%                   Dependencies, OldState);
+                = bootstrap_agent(Agent, Module, Arguments, OldState);
         Error ->
             Reply = Error,
             NewState = OldState
@@ -261,8 +270,11 @@ change_state(#state{agents=OldAgents}, Agent, Status) ->
 
 
 
-bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
-                OldState = #state{agents=OldAgents}) ->
+%% bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
+%%                 OldState = #state{agents=OldAgents}) ->
+bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) ->
+    Function = start_link,
+    Dependencies = Module:used_modules(),
     case lists:keysearch(Agent, #agent.name, OldAgents) of
         {value, #agent{state=running}} ->
             %% there is an agent with the same name still_running
@@ -270,7 +282,7 @@ bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
         {value, _AgentRecord} ->
             %% there is an agent with the same name but isn't running
             %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            Reply = agents_sup:start_agent(Agent, Module, Arguments),
             %% rebuild the gen_server state
             NewState =
                 case Reply of
@@ -307,7 +319,7 @@ bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
         false ->
             %% there aren't agents with this name
             %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Function, Arguments),
+            Reply = agents_sup:start_agent(Agent, Module, Arguments),
             %% rebuild the gen_server state
             NewState =
                 case Reply of

@@ -314,7 +314,8 @@ init_case(_Config) ->
 
 handle_call_unknown_command_case(_Config) ->
     %% fake_command
-    {reply, ok, fake_state} = manager:handle_call(fake_command, from, fake_state),
+    {reply, ok, fake_state} = manager:handle_call(fake_command, from,
+                                                  fake_state),
 
     ok.
 
@@ -325,15 +326,13 @@ handle_call_start_agent_running_case(_Config) ->
     %% start_agent
     %% Agent present in the state and running
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [],
-    Dependencies = [gen_server],
+    Module = tester_agent,
+    Arguments = [10],
     State = #state{agents=[#agent{name=Agent,
                                      state=running}]},
     {reply, {error, still_running}, State}
-        = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
-                               Dependencies}, from, State),
+        = manager:handle_call({start_agent, Agent, Module, Arguments},
+                              from, State),
     
     ok.
     
@@ -344,9 +343,7 @@ handle_call_start_agent_present_case(_Config) ->
     process_flag(trap_exit, true),
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
-    Dependencies = [],
     OldState = #state{agents=[#agent{name=Agent,
                                     state=terminated}]},
     {ok, SupPid} = agents_sup:start_link(),
@@ -358,8 +355,8 @@ handle_call_start_agent_present_case(_Config) ->
                                        arguments=Arguments,
                                        dependencies=Dependencies,
                                        state=running}]}
-    } = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
-                             Dependencies}, from, OldState),
+    } = manager:handle_call({start_agent, Agent, Module, Arguments},
+                            from, OldState),
     case Ret of
         {ok, AgentPid} ->
             ok;
@@ -386,9 +383,9 @@ handle_call_start_agent_new_case(_Config) ->
     process_flag(trap_exit, true),
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
+    Function = start_link,
     Arguments = [10],
-    Dependencies = [],
+    Dependencies = Module:used_modules(),
     OldState = #state{agents=[anything]},
     {ok, SupPid} = agents_sup:start_link(),
 
@@ -399,8 +396,8 @@ handle_call_start_agent_new_case(_Config) ->
                                        arguments=Arguments,
                                        dependencies=Dependencies,
                                        state=running}|[anything]]}
-    } = manager:handle_call({start_agent, Agent, Module, Function, Arguments,
-                             Dependencies}, from, OldState),
+    } = manager:handle_call({start_agent, Agent, Module, Arguments},
+                            from, OldState),
     case Ret of
         {ok, AgentPid} ->
             ok;
@@ -437,7 +434,7 @@ handle_call_host_agent_module_present_case(_Config) ->
                                      state=running}]},
 
     {reply, {error, still_running}, State}
-        = manager:handle_call({host_agent, Agent, Module, Function, Arguments,
+        = manager:handle_call({host_agent, Agent, Module, Arguments,
                                Dependencies}, {from, tag}, State),
 
     ok.
