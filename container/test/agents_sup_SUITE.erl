@@ -277,8 +277,8 @@ start_stop_case(_Config) ->
 start_agent_case(_Config) ->
     process_flag(trap_exit, true),
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
+    ModList = [agent, Module | Module:used_modules()],
     
     undefined = whereis(agents_sup),
 
@@ -289,15 +289,13 @@ start_agent_case(_Config) ->
     [] = supervisor:which_children(agents_sup),
 
     % check start_agent
-    agents_sup:start_agent(agent1, Module, Function, Arguments),
-    agents_sup:start_agent(agent2, Module, Function, Arguments),
+    agents_sup:start_agent(agent1, Module, Arguments),
+    agents_sup:start_agent(agent2, Module, Arguments),
 
     Children = supervisor:which_children(agents_sup),
-    {agent1, Agent1Pid, worker, [agent, Module]}
-        = lists:keyfind(agent1, 1, Children),
+    {agent1, Agent1Pid, worker, ModList} = lists:keyfind(agent1, 1, Children),
     true = erlang:is_process_alive(Agent1Pid),
-    {agent2, Agent2Pid, worker, [agent, Module]}
-        = lists:keyfind(agent2, 1, Children),
+    {agent2, Agent2Pid, worker, ModList} = lists:keyfind(agent2, 1, Children),
     true = erlang:is_process_alive(Agent2Pid),
 
     % check stop of the agent
@@ -309,8 +307,7 @@ start_agent_case(_Config) ->
     % check if agents restart (the don't)
     Children2 = supervisor:which_children(agents_sup),
     false = lists:keyfind(agent1, 1, Children2),
-    {agent2, Agent2Pid, worker, [agent, Module]}
-        = lists:keyfind(agent2, 1, Children2),
+    {agent2, Agent2Pid, worker, ModList} = lists:keyfind(agent2, 1, Children2),
     
     %% check stop of the agents when the supervisor is shutdown
     exit(AgentsPid, shutdown),

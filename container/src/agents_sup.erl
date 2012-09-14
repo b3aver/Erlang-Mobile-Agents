@@ -12,7 +12,7 @@
 
 %% API
 -export([start_link/0]).
--export([start_agent/4]).
+-export([start_agent/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -34,17 +34,16 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 
-start_agent(Agent, Module, Function, Arguments) ->
+start_agent(Agent, Module, Arguments) ->
     Restart = temporary, %% never restart
     Shutdown = 2000,
     Type = worker,
-    %% supervisor:start_child(?SERVER, {Agent, {Module, Function, Arguments},
-    %%                                  Restart, Shutdown, Type, [Module]}).
     supervisor:start_child(?SERVER, {Agent,
                                      {agent, start_link,
-                                      [Agent, Module, Function, Arguments]
+                                      [Agent, Module, Arguments]
                                      },
-                                     Restart, Shutdown, Type, [agent, Module]}).
+                                     Restart, Shutdown, Type, 
+                                     [agent, Module | Module:used_modules()]}).
 
 
 
