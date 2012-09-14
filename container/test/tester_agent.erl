@@ -11,9 +11,11 @@
 -behaviour(agent).
 
 %% agent callbacks
--export([used_modules/0, init/1, handle_migrate/1, handle_crash/1]}.
+-export([used_modules/0, init/1, handle_migrate/1, handle_crash/1]).
 
--export([wait/1]).
+%% API
+-export([start_link/2,
+         wait/1]).
 
 -define(AGENT_NAME, tester).
 
@@ -22,11 +24,16 @@
 %%% API
 %%%===================================================================
 
+start_link(Name, Args) ->
+    agent:start_link(Name, ?MODULE, Args).
+    
+
 wait(Sec) ->
     receive
     after (1000*Sec) ->
             ok
     end.
+
 
 %%%===================================================================
 %%% agent callbacks
@@ -37,14 +44,14 @@ used_modules() ->
 
 
 init([Sec]) ->
-    wait(Sec);
+    ?MODULE:wait(Sec);
 init([]) ->
-    wait(10).
+    ?MODULE:wait(10).
 
 
-handle_migrate(State) ->
+handle_migrate(_State) ->
     ok.
 
 
-handle_crash(State) ->
+handle_crash(_State) ->
     ok.

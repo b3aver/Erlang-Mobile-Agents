@@ -184,13 +184,12 @@ groups() ->
 %% @end
 %%--------------------------------------------------------------------
 all() -> 
-    [start_stop_case,
-     init_case,
+    [init_case,
      handle_call_case,
      handle_cast_unknown_command_case,
      handle_cast_stop_case,
      handle_info_exit_case,
-     start_case,
+     start_link_case,
      introduce_case,
      stop_case,
      migrate_case].
@@ -238,70 +237,21 @@ my_test_case(_Config) ->
     ok.
 
 
-start_stop_case(_Config) -> 
-    % check start
-    {ok, Pid} = agent:start_link(agent),
-    Pid = whereis(agent),
-    true = erlang:is_process_alive(whereis(agent)),
-    
-    % check start of another agent with an internal process
-    Time_to_live = 1,
-    {ok, Pid2} = agent:start_link(agent2, tester_agent, wait, [Time_to_live]),
-    Pid2 = whereis(agent2),
-    true = erlang:is_process_alive(whereis(agent2)),
-    receive after (1000*(Time_to_live+1)) -> nil end,
-    false = erlang:is_process_alive(Pid2),
-   
-    % stop the processes
-    agent:stop(agent),
-    receive after 100 -> nil end,
-    undefined = whereis(agent),
-    %% true = erlang:is_process_alive(whereis(agent2)),
-    %% agent:stop(agent2),
-    %% receive after 100 -> nil end,
-    %% undefined = whereis(agent),
-    %% undefined = whereis(agent2),
-
-    ok.
-
-
 init_case(_Config) ->
-    {ok, #state{}} = agent:init([]),
-
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
-    {ok, #state{module=Module, function=Function, arguments=Arguments, pid=Pid}} =
-        agent:init([Module, Function, Arguments]),
+    {ok, #state{module=Module, arguments=Arguments, pid=Pid}} =
+        agent:init([Module, Arguments]),
     true = is_process_alive(Pid),
 
     ok.
-
     
 
 handle_call_case(_Config) ->
     Self = self(),
     {reply, Self, fake_state} = agent:handle_call(introduce, from, fake_state),
     {reply, ok, fake_state} = agent:handle_call(fake_command, from, fake_state),
-    
 
-    Module = tester_agent,
-    Function = wait,
-    Arguments = [10],
-    State = #state{module=Module},
-    %% process already running
-    {reply,
-     {error, already_running},
-     State
-    } = agent:handle_call({start, Module, Function, Arguments}, from, State),
-
-    %% start a new process
-    {reply,
-     ok,
-     #state{module=Module, function=Function, arguments=Arguments, pid=Pid}
-    } = agent:handle_call({start, Module, Function, Arguments}, from, #state{}),
-    true = is_process_alive(Pid),
-    
     ok.
 
 
@@ -330,18 +280,29 @@ handle_info_exit_case(_Config) ->
 %%
 %% API functions' tests
 %%
-start_case(_Config) ->
+start_link_case(_Config) -> 
+    % check start
     Agent = agent,
-    {ok, _AgentPid} = agent:start_link(Agent),
-    agent:start(Agent, tester_agent, wait, [10]),
-    agent:stop(Agent),
-
+    Module = tester_agent,
+    Time_to_live = 1,
+    Arguments = [Time_to_live],
+    {ok, Pid} = agent:start_link(Agent, Module, Arguments),
+    Pid = whereis(Agent),
+    true = erlang:is_process_alive(whereis(Agent)),
+    
+    %% wait time to live
+    receive after (1000*(Time_to_live+1)) -> nil end,
+    undefined = whereis(Agent),
+    false = erlang:is_process_alive(Pid),
+   
     ok.
 
 
 introduce_case(_Config) ->
     Agent = agent,
-    {ok, AgentPid} = agent:start_link(Agent),
+    Module = tester_agent,
+    Arguments = [10],
+    {ok, AgentPid} = agent:start_link(Agent, Module, Arguments),
     AgentPid = agent:introduce(Agent),
     AgentPid = agent:introduce({Agent, node()}),
     agent:stop(Agent),
@@ -350,15 +311,21 @@ introduce_case(_Config) ->
 
     
 stop_case(_Config) ->
+    % check stop
     Agent = agent,
-    {ok, AgentPid} = agent:start_link(Agent),
-    ok = agent:stop(Agent),
-    %% ok = agent:stop({Agent, node()}),
-
-    receive after 100 -> nill end,
+    Module = tester_agent,
+    Time_to_live = 10,
+    Arguments = [Time_to_live],
+    {ok, Pid} = agent:start_link(Agent, Module, Arguments),
+    Pid = whereis(Agent),
+    true = erlang:is_process_alive(whereis(Agent)),
+      
+    % stop the agent
+    agent:stop(Agent),
+    receive after 100 -> nil end,
     undefined = whereis(Agent),
-    false = is_process_alive(AgentPid),
-    
+    false = erlang:is_process_alive(Pid),
+
     ok.
 
 
