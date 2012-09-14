@@ -10,25 +10,28 @@
 '-------------------------------------------------------------------
 
 @startuml img/sequence_start_agents.png
-[-> manager@node1: start_agent(agent1, Module, Function, Arguments, Dependencies)
-'manager@node1 -> manager@node1: register(agent1)
+[-> manager@node1: start_agent(agent1, Module, Arguments)
 note over manager@node1: save agent1's informations \nin the internal state
-manager@node1 -> agents_sup@node1: start_agent(agent1, Module, Function, Arguments)
+manager@node1 -> agents_sup@node1: start_agent(agent1, Module, Arguments)
 create agent1@node1
-agents_sup@node1 -> agent1@node1: Module:Function(Arguments)
-note left agent1@node1: agent1 now runs on node1
+agents_sup@node1 -> agent1@node1: agent:start_link(agent1, Module, Arguments)
+create agent_loop
+agent1@node1 -> agent_loop: Module:init(Arguments)
+note over agent1@node1: agent1 now runs on node1
+activate agent_loop
 @enduml
 
 
 @startuml img/sequence_migration.png
-activate agent1@node1 
-' [-> agent1@node1: migrate(Node2, Function, Arguments)
-agent1@node1 -> manager@node1: migrate(agent1, node2, Function, Arguments)
+activate agent_loop@node1
+activate agent1@node1
+agent_loop@node1 -> agent1@node1: migrate(node2, Function, State)
+agent1@node1 -> manager@node1: migrate(agent1, node2, State)
 note over manager@node1: retrieves Module and Dependencies of agent1
 ' manager@node1 -> platform@node0: lookfor_container(node2)
 ' platform@node0 -> manager@node1: manager@node2
 ' manager@node1 -> manager@node2: start_agent(agent1, Module, Function, Arguments)
-manager@node1 -> manager@node2: host_agent(agent1, Module, Function,\n                Arguments, Dependencies)
+manager@node1 -> manager@node2: host_agent(agent1, Module, State,\n                  Dependencies)
 group foreach Mod in [Module|Dependencies]
   group if manager@node2 hasn't got Mod
     manager@node2 -> manager@node1: get_module(Mod)
@@ -38,15 +41,19 @@ group foreach Mod in [Module|Dependencies]
   end
 end
 note over manager@node2: save agent1's informations \nin the internal state
-manager@node2 -> agents_sup@node2: start_agent(agent1, Module, Function, Arguments)
+manager@node2 -> agents_sup@node2: start_agent_migration(agent1, Module, State)
 create agent1@node2
-agents_sup@node2 -> agent1@node2: Module:Function(Arguments)
-note left agent1@node2: agent1 now runs on node2
+agents_sup@node2 -> agent1@node2: start_link_migration(agent1, Module, State)
+create agent_loop@node2
+agent1@node2 -> agent_loop@node2: Module:handle_migration(State)
+note over agent1@node2: agent1 now runs on node2
 manager@node2 <- agents_sup@node2: ok
 manager@node1 <- manager@node2: ok
 note over manager@node1: sets agent1's state as migrated
-agent1@node1 <-manager@node1: exit
-destroy agent1@node1 
+agent1@node1 <-manager@node1: stop
+destroy agent1@node1
+agent_loop@node1 <- agent1@node1: exit
+destroy agent_loop@node1
 @enduml
 
 
