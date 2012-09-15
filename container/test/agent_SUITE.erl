@@ -190,6 +190,7 @@ all() ->
      handle_cast_stop_case,
      handle_info_exit_case,
      start_link_case,
+     reactivate_case,
      introduce_case,
      stop_case,
      migrate_case].
@@ -240,9 +241,17 @@ my_test_case(_Config) ->
 init_case(_Config) ->
     Module = tester_agent,
     Arguments = [10],
+    State = [wait, 10],
+
+    %% start case
     {ok, #state{module=Module, arguments=Arguments, pid=Pid}} =
-        agent:init([Module, Arguments]),
+        agent:init([start, Module, Arguments]),
     true = is_process_alive(Pid),
+
+    %% reactivate case
+    {ok, #state{module=Module, pid=Pid2}} =
+        agent:init([reactivate, Module, State]),
+    true = is_process_alive(Pid2),
 
     ok.
     
@@ -287,6 +296,24 @@ start_link_case(_Config) ->
     Time_to_live = 1,
     Arguments = [Time_to_live],
     {ok, Pid} = agent:start_link(Agent, Module, Arguments),
+    Pid = whereis(Agent),
+    true = erlang:is_process_alive(whereis(Agent)),
+    
+    %% wait time to live
+    receive after (1000*(Time_to_live+1)) -> nil end,
+    undefined = whereis(Agent),
+    false = erlang:is_process_alive(Pid),
+   
+    ok.
+
+
+reactivate_case(_Config) -> 
+    % check start
+    Agent = agent,
+    Module = tester_agent,
+    Time_to_live = 1,
+    State = [wait, Time_to_live],
+    {ok, Pid} = agent:reactivate(Agent, Module, State),
     Pid = whereis(Agent),
     true = erlang:is_process_alive(whereis(Agent)),
     

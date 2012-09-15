@@ -49,8 +49,8 @@ init([]) ->
     ?MODULE:wait(10).
 
 
-handle_migration(_State) ->
-    ok.
+handle_migration([wait, Sec]) ->
+    ?MODULE:wait(Sec).
 
 
 handle_crash(_State) ->

@@ -15,9 +15,10 @@
 
 %% API
 -export([start_link/3,
+         reactivate/3,
          introduce/1,
          stop/1,
-         migrate/2]).
+         migrate/3]).
 
 
 %% gen_server callbacks
@@ -54,7 +55,13 @@ behaviour_info(_Other) ->
 %% @end
 %%--------------------------------------------------------------------
 start_link(Name, Module, Arguments) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Module, Arguments], []).
+    gen_server:start_link({local, Name}, ?MODULE,
+                          [start, Module, Arguments], []).
+
+
+reactivate(Name, Module, State) ->
+    gen_server:start_link({local, Name}, ?MODULE,
+                          [reactivate, Module, State], []).
 
 
 introduce(Name) ->
@@ -65,8 +72,8 @@ stop(Name) ->
     gen_server:cast(Name, stop).
 
 
-migrate(Name, Node) ->
-    gen_server:call(Name, {migrate, Node}).
+migrate(Name, Node, State) ->
+    gen_server:call(Name, {migrate, Node, State}).
     
 
 %%%===================================================================
@@ -85,10 +92,15 @@ migrate(Name, Node) ->
 %% @end
 %%--------------------------------------------------------------------
 
-init([Module, Arguments]) ->
+init([start, Module, Arguments]) ->
     process_flag(trap_exit, true),
     Pid = spawn_link(Module, init, [Arguments]),
-    {ok, #state{module=Module, arguments=Arguments, pid=Pid}}.
+    {ok, #state{module=Module, arguments=Arguments, pid=Pid}};
+
+init([reactivate, Module, State]) ->
+    process_flag(trap_exit, true),
+    Pid = spawn_link(Module, handle_migration, [State]),
+    {ok, #state{module=Module, pid=Pid}}.
 
 
 %%--------------------------------------------------------------------
@@ -110,15 +122,17 @@ handle_call(introduce, _From, State) ->
     {reply, self(), State};
 
 
-handle_call({migrate, Node}, _From, State) ->
+handle_call({migrate, Node, MigState}, _From, State) ->
+    %% retrieve the name of the current agent
     case process_info(self(), registered_name) of
         {registered_name, Agent} ->
             ok;
         List ->
             {value, {registerd_name, Agent}}
                 = lists:keysearch(registered_name, 1, List)
-    end,    
-    Reply = manager:migrate(Agent, Node, start_link, [Agent]),
+    end,
+    %% ask to the manager to migrate
+    Reply = manager:migrate(Agent, Node, MigState),
     {stop, migrated, Reply, State};
 
 
