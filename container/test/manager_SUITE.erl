@@ -191,19 +191,19 @@ all() ->
      handle_call_start_agent_running_case,
      handle_call_start_agent_present_case,
      handle_call_start_agent_new_case,
-     %% handle_call_host_agent_module_present_case,
-     %% handle_call_host_agent_transfer_error_case,
-     %% handle_call_host_agent_no_errors_case,
+     handle_call_host_agent_module_present_case,
+     handle_call_host_agent_transfer_error_case,
+     handle_call_host_agent_no_errors_case,
      %% handle_call_migrate_not_present_case,
      %% handle_call_migrate_different_pid_case,
      %% handle_call_migrate_start_error_case,
      %% handle_call_migrate_no_errors_case,
-     %% handle_call_get_module_local_case,
+     handle_call_get_module_local_case,
      handle_cast_case,
      handle_info_case,
      start_agent3_case,
      start_agent4_case,
-     %% host_agent_case,
+     host_agent_case,
      %% migrate_case,
      get_module_case,
      get_module_pid_case].
@@ -392,7 +392,6 @@ handle_call_start_agent_new_case(_Config) ->
     {reply, Ret, #state{agents=[#agent{name=Agent,
                                        pid=AgentPid,
                                        module=Module,
-                                       function=Function,
                                        arguments=Arguments,
                                        dependencies=Dependencies,
                                        state=running}|[anything]]}
@@ -426,15 +425,14 @@ handle_call_host_agent_module_present_case(_Config) ->
     %% Module in the code search path
     %% Agent present in the state and running
     Agent = agent,
-    Module = agent,
-    Function = start_link,
-    Arguments = [],
+    Module = tester_agent,
+    MigState = [wait, 10],
     Dependencies = [erlang],
     State = #state{agents=[#agent{name=Agent,
                                      state=running}]},
 
     {reply, {error, still_running}, State}
-        = manager:handle_call({host_agent, Agent, Module, Arguments,
+        = manager:handle_call({host_agent, Agent, Module, MigState,
                                Dependencies}, {from, tag}, State),
 
     ok.
@@ -446,8 +444,7 @@ handle_call_host_agent_transfer_error_case(_Config) ->
     %% nether in the manager that requires to host the agent.
     Agent = agent,
     Module = foo,
-    Function = bar,
-    Arguments = [],
+    MigState = [],
     Dependencies = [],
 
     %% start a manager simulating the one that requires to host the agent
@@ -455,7 +452,7 @@ handle_call_host_agent_transfer_error_case(_Config) ->
     State = #state{},
 
     {reply, {error, load_module_error}, State}
-        = manager:handle_call({host_agent, Agent, Module, Function, Arguments,
+        = manager:handle_call({host_agent, Agent, Module, MigState,
                                Dependencies}, {ManagerPid, tag}, State),
 
     ok.
@@ -467,9 +464,8 @@ handle_call_host_agent_no_errors_case(_Config) ->
     %% but it is in the manager that requires to host the agent.
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
-    Arguments = [10],
-    Dependencies = [],
+    MigState = [wait, 10],
+    Dependencies = Module:used_modules(),
     Node = node,
     NodeL = list_to_atom("node@"++net_adm:localhost()),     
 
@@ -496,10 +492,10 @@ handle_call_host_agent_no_errors_case(_Config) ->
     %% do the call
     State = #state{agents=[]},    
     {reply, Ret, #state{agents=[#agent{name=Agent, pid=AgentPid, module=Module,
-                                       function=Function, arguments=Arguments,
+                                       arguments=MigState,
                                        dependencies=Dependencies,
                                        state=running}]}}
-        = manager:handle_call({host_agent, Agent, Module, Function, Arguments,
+        = manager:handle_call({host_agent, Agent, Module, MigState,
                                Dependencies}, {ManagerPid, tag}, State),
     case Ret of
         {ok, AgentPid} ->
@@ -810,9 +806,8 @@ start_agent4_case(_Config) ->
 host_agent_case(_Config) ->
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
-    Arguments = [10],
-    Dependencies = [erlang, code],
+    MigState = [wait, 10],
+    Dependencies = Module:used_modules(),
     Node = node,
     NodeL = list_to_atom("node@"++net_adm:localhost()),     
 
@@ -828,8 +823,7 @@ host_agent_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
     
     %% do the call
-    Ret = manager:host_agent(NodeL, Agent, Module, Function, Arguments,
-                             Dependencies),
+    Ret = manager:host_agent(NodeL, Agent, Module, MigState, Dependencies),
     Children = supervisor:which_children({agents_sup, NodeL}),
     case Ret of
         {ok, AgentPid} ->

@@ -14,8 +14,8 @@
 -export([start_link/0]).
 -export([start_agent/3,
          start_agent/4,
-         host_agent/6,
-         migrate/4,
+         host_agent/5,
+         migrate/3,
          get_module/2]).
 
 %% gen_server callbacks
@@ -41,12 +41,6 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
-%% start_agent(Agent, Module, Function, Arguments, Dependencies) ->
-%%     gen_server:call(?SERVER, {start_agent, Agent, Module, Function, Arguments,
-%%                               Dependencies}).
-%% start_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
-%%     gen_server:call({?SERVER, ServerNode}, {start_agent, Agent, Module, Function,
-%%                                             Arguments, Dependencies}).
 start_agent(Agent, Module, Arguments) ->
     gen_server:call(?SERVER, {start_agent, Agent, Module, Arguments}).
 start_agent(ServerNode, Agent, Module, Arguments) ->
@@ -54,13 +48,13 @@ start_agent(ServerNode, Agent, Module, Arguments) ->
                     {start_agent, Agent, Module, Arguments}).
 
 
-migrate(Agent, Node, Function, Arguments) ->
-    gen_server:call(?SERVER, {migrate, Agent, Node, Function, Arguments}).
+migrate(Agent, Node, State) ->
+    gen_server:call(?SERVER, {migrate, Agent, Node, State}).
 
 
-host_agent(ServerNode, Agent, Module, Function, Arguments, Dependencies) ->
-    gen_server:call({?SERVER, ServerNode}, {host_agent, Agent, Module, Function,
-                                            Arguments, Dependencies}).
+host_agent(ServerNode, Agent, Module, State, Dependencies) ->
+    gen_server:call({?SERVER, ServerNode}, {host_agent, Agent, Module,
+                                            State, Dependencies}).
 
 
 get_module(Manager, Module) when is_pid(Manager) ->
@@ -103,27 +97,22 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({start_agent, Agent, Module, Arguments}, _From, OldState) ->
-    %% Function = start_link,
-    %% Dependencies = Module:used_modules(),
-    %% {Reply, NewState} = bootstrap_agent(Agent, Module, Function, Arguments,
-    %%                                     Dependencies, OldState),
-    {Reply, NewState} = bootstrap_agent(Agent, Module, Arguments, OldState),
+    {Reply, NewState} = bootstrap_agent_start(Agent, Module, Arguments,
+                                              OldState),
 
     {reply, Reply, NewState};
 
 
-handle_call({host_agent, _A, _M, _F, _A, Dependencies}, _From, OldState)
+handle_call({host_agent, _A, _M, _S, Dependencies}, _From, OldState)
   when not(is_list(Dependencies)) ->
     {reply, {error, bad_args}, OldState};
-handle_call({host_agent, Agent, Module, Function, Arguments, Dependencies},
+handle_call({host_agent, Agent, Module, MigState, Dependencies},
             {From, _Tag},
             OldState) ->
     case load_modules(From, [Module|Dependencies]) of
         ok ->
             {Reply, NewState}
-                %% = bootstrap_agent(Agent, Module, Function, Arguments,
-                %%                   Dependencies, OldState);
-                = bootstrap_agent(Agent, Module, Arguments, OldState);
+                = bootstrap_agent_host(Agent, Module, MigState, OldState);
         Error ->
             Reply = Error,
             NewState = OldState
@@ -132,7 +121,7 @@ handle_call({host_agent, Agent, Module, Function, Arguments, Dependencies},
     {reply, Reply, NewState};
 
 
-handle_call({migrate, Agent, Node, Function, Arguments},
+handle_call({migrate, Agent, Node, MigState},
             From,
             OldState = #state{agents=OldAgents}) ->
     %% lookfor agent stored informations: module, pid
@@ -147,7 +136,7 @@ handle_call({migrate, Agent, Node, Function, Arguments},
                     Dependencies = AgentInfo#agent.dependencies,
                     %% start Agent in Node
                     case manager:host_agent(Node, Agent, Module, 
-                                            Function, Arguments, Dependencies) of
+                                            MigState, Dependencies) of
                         {ok, _NewPid} ->
                             Reply = ok,
                             %% change agent stored informations
@@ -270,10 +259,23 @@ change_state(#state{agents=OldAgents}, Agent, Status) ->
 
 
 
-%% bootstrap_agent(Agent, Module, Function, Arguments, Dependencies,
-%%                 OldState = #state{agents=OldAgents}) ->
-bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) ->
-    Function = start_link,
+bootstrap_agent_host(Agent, Module, MigState,
+                     OldState = #state{agents=OldAgents}) ->
+    Fun = fun agents_sup:host_agent/3,
+    bootstrap_agent(Agent, Module, MigState,
+                    Fun, OldState = #state{agents=OldAgents}).
+
+
+bootstrap_agent_start(Agent, Module, Arguments,
+                     OldState = #state{agents=OldAgents}) ->
+    Fun = fun agents_sup:start_agent/3,
+    bootstrap_agent(Agent, Module, Arguments,
+                    Fun, OldState = #state{agents=OldAgents}).
+
+
+bootstrap_agent(Agent, Module, Arguments,
+                AgentSupFun, OldState = #state{agents=OldAgents}) ->
+    %% Function = start_link,
     Dependencies = Module:used_modules(),
     case lists:keysearch(Agent, #agent.name, OldAgents) of
         {value, #agent{state=running}} ->
@@ -282,7 +284,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
         {value, _AgentRecord} ->
             %% there is an agent with the same name but isn't running
             %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Arguments),
+            Reply = AgentSupFun(Agent, Module, Arguments),
             %% rebuild the gen_server state
             NewState =
                 case Reply of
@@ -294,7 +296,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
                         #state{agents=[#agent{name=Agent,
                                               pid=AgentPid,
                                               module=Module,
-                                              function=Function,
+                                              %% function=Function,
                                               arguments=Arguments,
                                               dependencies=Dependencies,
                                               state=running}
@@ -307,7 +309,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
                         #state{agents=[#agent{name=Agent,
                                               pid=AgentPid,
                                               module=Module,
-                                              function=Function,
+                                              %% function=Function,
                                               arguments=Arguments,
                                               dependencies=Dependencies,
                                               state=running}
@@ -319,7 +321,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
         false ->
             %% there aren't agents with this name
             %% start the agent
-            Reply = agents_sup:start_agent(Agent, Module, Arguments),
+            Reply = AgentSupFun(Agent, Module, Arguments),
             %% rebuild the gen_server state
             NewState =
                 case Reply of
@@ -327,7 +329,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
                         #state{agents=[#agent{name=Agent,
                                               pid=AgentPid,
                                               module=Module,
-                                              function=Function,
+                                              %% function=Function,
                                               arguments=Arguments,
                                               dependencies=Dependencies,
                                               state=running}
@@ -336,7 +338,7 @@ bootstrap_agent(Agent, Module, Arguments, OldState = #state{agents=OldAgents}) -
                         #state{agents=[#agent{name=Agent,
                                               pid=AgentPid,
                                               module=Module,
-                                              function=Function,
+                                              %% function=Function,
                                               arguments=Arguments,
                                               dependencies=Dependencies,
                                               state=running}
