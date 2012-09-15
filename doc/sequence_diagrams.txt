@@ -25,7 +25,7 @@ activate agent_loop
 @startuml img/sequence_migration.png
 activate agent_loop@node1
 activate agent1@node1
-agent_loop@node1 -> agent1@node1: migrate(node2, Function, State)
+agent_loop@node1 -> agent1@node1: migrate(agent1, node2, State)
 agent1@node1 -> manager@node1: migrate(agent1, node2, State)
 note over manager@node1: retrieves Module and Dependencies of agent1
 ' manager@node1 -> platform@node0: lookfor_container(node2)
@@ -41,9 +41,9 @@ group foreach Mod in [Module|Dependencies]
   end
 end
 note over manager@node2: save agent1's informations \nin the internal state
-manager@node2 -> agents_sup@node2: start_agent_migration(agent1, Module, State)
+manager@node2 -> agents_sup@node2: host_agent(agent1, Module, State)
 create agent1@node2
-agents_sup@node2 -> agent1@node2: start_link_migration(agent1, Module, State)
+agents_sup@node2 -> agent1@node2: reactivate(agent1, Module, State)
 create agent_loop@node2
 agent1@node2 -> agent_loop@node2: Module:handle_migration(State)
 note over agent1@node2: agent1 now runs on node2
