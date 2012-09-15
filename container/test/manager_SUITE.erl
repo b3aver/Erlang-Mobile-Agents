@@ -191,20 +191,20 @@ all() ->
      handle_call_start_agent_running_case,
      handle_call_start_agent_present_case,
      handle_call_start_agent_new_case,
-     handle_call_host_agent_module_present_case,
-     handle_call_host_agent_transfer_error_case,
-     handle_call_host_agent_no_errors_case,
-     handle_call_migrate_not_present_case,
-     handle_call_migrate_different_pid_case,
-     handle_call_migrate_start_error_case,
-     handle_call_migrate_no_errors_case,
-     handle_call_get_module_local_case,
+     %% handle_call_host_agent_module_present_case,
+     %% handle_call_host_agent_transfer_error_case,
+     %% handle_call_host_agent_no_errors_case,
+     %% handle_call_migrate_not_present_case,
+     %% handle_call_migrate_different_pid_case,
+     %% handle_call_migrate_start_error_case,
+     %% handle_call_migrate_no_errors_case,
+     %% handle_call_get_module_local_case,
      handle_cast_case,
      handle_info_case,
+     start_agent3_case,
      start_agent4_case,
-     start_agent5_case,
-     host_agent_case,
-     migrate_case,
+     %% host_agent_case,
+     %% migrate_case,
      get_module_case,
      get_module_pid_case].
 
@@ -721,12 +721,14 @@ handle_info_case(_Config) ->
 %%
 %% API functions' tests
 %%
-start_agent4_case(_Config) ->
+start_agent3_case(_Config) ->
     Agent = agent,
+    Module = tester_agent,
+    Arguments = [10],
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(Agent, tester_agent, wait, [10], []),
+    Ret = manager:start_agent(Agent, Module, Arguments),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
@@ -762,12 +764,14 @@ start_agent4_case(_Config) ->
     ok.
 
 
-start_agent5_case(_Config) ->
+start_agent4_case(_Config) ->
     Agent = agent,
+    Module = tester_agent,
+    Arguments = [10],
     process_flag(trap_exit, true),
     {ok, ManPid} = manager:start_link(),
     {ok, SupPid} = agents_sup:start_link(),
-    Ret = manager:start_agent(node(), Agent, tester_agent, wait, [10], []),
+    Ret = manager:start_agent(node(), Agent, Module, Arguments),
     case Ret of
         {ok, AgentPid} ->
             true = erlang:is_process_alive(AgentPid),
