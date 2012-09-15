@@ -182,7 +182,10 @@ groups() ->
 %% @end
 %%--------------------------------------------------------------------
 all() -> 
-    [init_case, start_stop_case, start_agent_case].
+    [init_case,
+     start_stop_case,
+     start_agent_case,
+     host_agent_case].
 
 
 %%--------------------------------------------------------------------
@@ -291,6 +294,54 @@ start_agent_case(_Config) ->
     % check start_agent
     agents_sup:start_agent(agent1, Module, Arguments),
     agents_sup:start_agent(agent2, Module, Arguments),
+
+    Children = supervisor:which_children(agents_sup),
+    {agent1, Agent1Pid, worker, ModList} = lists:keyfind(agent1, 1, Children),
+    true = erlang:is_process_alive(Agent1Pid),
+    {agent2, Agent2Pid, worker, ModList} = lists:keyfind(agent2, 1, Children),
+    true = erlang:is_process_alive(Agent2Pid),
+
+    % check stop of the agent
+    gen_server:cast(agent1, stop),
+    receive after 100 -> nil end, % wait a while
+    % check if old process are dead
+    false = erlang:is_process_alive(Agent1Pid),
+    true = erlang:is_process_alive(Agent2Pid),
+    % check if agents restart (the don't)
+    Children2 = supervisor:which_children(agents_sup),
+    false = lists:keyfind(agent1, 1, Children2),
+    {agent2, Agent2Pid, worker, ModList} = lists:keyfind(agent2, 1, Children2),
+    
+    %% check stop of the agents when the supervisor is shutdown
+    exit(AgentsPid, shutdown),
+    receive
+        {'EXIT', _Pid, _Reason} ->
+            false = erlang:is_process_alive(AgentsPid),
+            false = erlang:is_process_alive(Agent2Pid)
+    after
+        2000 -> exit(shutdown_error)
+    end,
+
+    ok.
+
+
+host_agent_case(_Config) ->
+    process_flag(trap_exit, true),
+    Module = tester_agent,
+    State = [wait, 10],
+    ModList = [agent, Module | Module:used_modules()],
+    
+    undefined = whereis(agents_sup),
+
+    %% start supervisor
+    {ok, AgentsPid} = agents_sup:start_link(),
+    receive after 100 -> nil end,
+    AgentsPid = whereis(agents_sup),
+    [] = supervisor:which_children(agents_sup),
+
+    % check start_agent
+    agents_sup:host_agent(agent1, Module, State),
+    agents_sup:host_agent(agent2, Module, State),
 
     Children = supervisor:which_children(agents_sup),
     {agent1, Agent1Pid, worker, ModList} = lists:keyfind(agent1, 1, Children),

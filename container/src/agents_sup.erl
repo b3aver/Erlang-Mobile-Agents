@@ -11,8 +11,9 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
--export([start_agent/3]).
+-export([start_link/0,
+         start_agent/3,
+         host_agent/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -35,16 +36,11 @@ start_link() ->
 
 
 start_agent(Agent, Module, Arguments) ->
-    Restart = temporary, %% never restart
-    Shutdown = 2000,
-    Type = worker,
-    supervisor:start_child(?SERVER, {Agent,
-                                     {agent, start_link,
-                                      [Agent, Module, Arguments]
-                                     },
-                                     Restart, Shutdown, Type, 
-                                     [agent, Module | Module:used_modules()]}).
+    start_agent_fun(Agent, Module, Arguments, start_link).
 
+
+host_agent(Agent, Module, State) ->
+    start_agent_fun(Agent, Module, State, reactivate).
 
 
 %%%===================================================================
@@ -83,3 +79,14 @@ init([]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+start_agent_fun(Agent, Module, State, Fun) ->
+    Restart = temporary, %% never restart
+    Shutdown = 2000,
+    Type = worker,
+    supervisor:start_child(?SERVER, {Agent,
+                                     {agent, Fun,
+                                      [Agent, Module, State]
+                                     },
+                                     Restart, Shutdown, Type, 
+                                     [agent, Module | Module:used_modules()]}).
