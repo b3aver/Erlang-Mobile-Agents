@@ -194,17 +194,17 @@ all() ->
      handle_call_host_agent_module_present_case,
      handle_call_host_agent_transfer_error_case,
      handle_call_host_agent_no_errors_case,
-     %% handle_call_migrate_not_present_case,
-     %% handle_call_migrate_different_pid_case,
-     %% handle_call_migrate_start_error_case,
-     %% handle_call_migrate_no_errors_case,
+     handle_call_migrate_not_present_case,
+     handle_call_migrate_different_pid_case,
+     handle_call_migrate_start_error_case,
+     handle_call_migrate_no_errors_case,
      handle_call_get_module_local_case,
      handle_cast_case,
      handle_info_case,
      start_agent3_case,
      start_agent4_case,
      host_agent_case,
-     %% migrate_case,
+     migrate_case,
      get_module_case,
      get_module_pid_case].
 
@@ -531,14 +531,12 @@ handle_call_migrate_not_present_case(_Config) ->
     %% Agent not present in the state of the manager.
     Agent = agent,
     Node = node,
-    Function = function,
-    Arguments = args,
+    MigState = args,
     From = {self(), ref},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}]},
 
     {reply, {error, wrong_agent}, State} = manager:handle_call({migrate, Agent,
-                                                                Node, Function,
-                                                                Arguments},
+                                                                Node, MigState},
                                                                From, State),
 
     ok.
@@ -549,15 +547,13 @@ handle_call_migrate_different_pid_case(_Config) ->
     %% Agent present in the state of the manager, but with different pid.
     Agent = agent,
     Node = node,
-    Function = function,
-    Arguments = args,
+    MigState = args,
     From = {list_to_pid("<0.1.0>"), ref},
     AgentInfo = #agent{name=Agent, pid=list_to_pid("<0.2.0>")},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
 
     {reply, {error, forbidden}, State} = manager:handle_call({migrate, Agent,
-                                                              Node, Function,
-                                                              Arguments},
+                                                              Node, MigState},
                                                              From, State),
     
     ok.
@@ -571,14 +567,12 @@ handle_call_migrate_start_error_case(_Config) ->
 
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
-    Dependencies = [],
+    Dependencies = Module:used_modules(),
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
-    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
-                       arguments=Arguments, dependencies=Dependencies,
-                       state=running},
+    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, arguments=Arguments,
+                       dependencies=Dependencies, state=running},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
 
     %% create another node running the container application
@@ -592,14 +586,16 @@ handle_call_migrate_start_error_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with the same name
-    case manager:start_agent(NodeL, Agent, tester_agent, wait, [10], []) of
+    case manager:start_agent(NodeL, Agent, Module, arguments) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
     end,
 
+    %% try to migrate to the other node an agent with the same name
+    MigState = {wait, [10]},
     {reply, {error, restart_error}, State}
-        = manager:handle_call({migrate, Agent, NodeL, Function, Arguments},
+        = manager:handle_call({migrate, Agent, NodeL, MigState},
                               From, State),
     
     %% stop the container application
@@ -618,14 +614,12 @@ handle_call_migrate_no_errors_case(_Config) ->
 
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
-    Dependencies = [],
+    Dependencies = Module:used_modules(),
     FromPid = list_to_pid("<0.1.0>"),
     From = {FromPid, ref},
-    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, function=Function, 
-                       arguments=Arguments, dependencies=Dependencies,
-                       state=running},
+    AgentInfo = #agent{name=Agent, pid=FromPid, module=Module, arguments=Arguments,
+                       dependencies=Dependencies, state=running},
     State = #state{agents=[#agent{name=agent1}, #agent{name=agent2}, AgentInfo]},
 
     %% create another node running the container application
@@ -639,7 +633,7 @@ handle_call_migrate_no_errors_case(_Config) ->
     ok = rpc:call(NodeL, application, start, [container]),
 
     %% start an agent with a different name
-    case manager:start_agent(NodeL, agent2, tester_agent, wait, [10], []) of
+    case manager:start_agent(NodeL, agent2, Module, Arguments) of
         {ok, _AgentPid} -> ok;
         {ok, _AgentPid, _Info} -> ok;
         {error, _Error} -> exit(start_agent_error)
@@ -649,9 +643,11 @@ handle_call_migrate_no_errors_case(_Config) ->
     NewState = #state{agents=[#agent{name=agent1},
                               #agent{name=agent2},
                               NewAgentInfo]},
-    
-    {reply, ok, NewState} = manager:handle_call({migrate, Agent, NodeL, Function,
-                                              Arguments}, From, State),
+                                             
+    %% try to migrate an agent to the other node
+    MigState = {wait, [10]},
+    {reply, ok, NewState} = manager:handle_call({migrate, Agent, NodeL, MigState},
+                                                From, State),
     
     Pid = gen_server:call({agent, NodeL}, introduce),
     true = is_pid(Pid),
@@ -852,13 +848,12 @@ migrate_case(_Config) ->
 
     Agent = agent,
     Module = tester_agent,
-    Function = wait,
     Arguments = [10],
 
     %% start the application container locally
     ok = application:start(container),
     %% start an agent in the current node
-    AgentPid = case manager:start_agent(Agent, Module, Function, Arguments, []) of
+    AgentPid = case manager:start_agent(Agent, Module, Arguments) of
                    {ok, APid} -> APid;
                    {ok, APid, _Info} -> APid;
                    {error, _Error} -> exit(start_agent_error)
@@ -875,8 +870,9 @@ migrate_case(_Config) ->
     %% start the container application in the other node
     ok = rpc:call(NodeL, application, start, [container]),
 
-    %% migrate the node
-    ok = agent:migrate(Agent, NodeL),
+    %% migrate to Node
+    MigState = {wait, [10]},
+    ok = agent:migrate(Agent, NodeL, MigState),
 
     Pid = gen_server:call({agent, NodeL}, introduce),
     true = is_pid(Pid),

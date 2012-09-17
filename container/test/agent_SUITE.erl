@@ -362,10 +362,13 @@ migrate_case(_Config) ->
     NodeL = list_to_atom("node@"++net_adm:localhost()), 
     Agent = agent,
 
+    Module = tester_agent,
+    Arguments = [10],
+
     %% start the container application locally
     ok = application:start(container),
     %% start an agent locally
-    {ok, AgentPid} = manager:start_agent(Agent, tester_agent, wait, [10], []),
+    {ok, AgentPid} = manager:start_agent(Agent, Module, Arguments),
     AgentPid = agent:introduce(Agent),
 
 
@@ -384,7 +387,8 @@ migrate_case(_Config) ->
     %% receive after 5000 -> ok end,
 
     %% migrate the Agent to Node
-    ok = agent:migrate(Agent, NodeL),
+    MigState = {wait, [10]},
+    ok = agent:migrate(Agent, NodeL, MigState),
     receive after 100 -> ok end,
     undefined = whereis(Agent),
     false = is_process_alive(AgentPid),
@@ -394,7 +398,7 @@ migrate_case(_Config) ->
     Children = supervisor:which_children({agents_sup, NodeL}),
     NewAgentPid = agent:introduce({Agent, NodeL}),
     true = is_pid(NewAgentPid),    
-    {value, {Agent, NewAgentPid, worker, [agent, tester_agent]}}
+    {value, {Agent, NewAgentPid, worker, [agent, Module]}}
         = lists:keysearch(Agent, 1, Children),
     
     %% stop the container application
