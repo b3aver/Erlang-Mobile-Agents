@@ -56,12 +56,12 @@ behaviour_info(_Other) ->
 %%--------------------------------------------------------------------
 start_link(Name, Module, Arguments) ->
     gen_server:start_link({local, Name}, ?MODULE,
-                          [start, Module, Arguments], []).
+                          [start, Name, Module, Arguments], []).
 
 
 reactivate(Name, Module, State) ->
     gen_server:start_link({local, Name}, ?MODULE,
-                          [reactivate, Module, State], []).
+                          [reactivate, Name, Module, State], []).
 
 
 introduce(Name) ->
@@ -92,15 +92,15 @@ migrate(Name, Node, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-init([start, Module, Arguments]) ->
+init([start, Name, Module, Arguments]) ->
     process_flag(trap_exit, true),
-    Pid = spawn_link(Module, init, [Arguments]),
-    {ok, #state{module=Module, arguments=Arguments, pid=Pid}};
+    Pid = spawn_link(Module, init, [{Name, Arguments}]),
+    {ok, #state{name=Name, module=Module, arguments=Arguments, pid=Pid}};
 
-init([reactivate, Module, State]) ->
+init([reactivate, Name, Module, State]) ->
     process_flag(trap_exit, true),
-    Pid = spawn_link(Module, handle_migration, [State]),
-    {ok, #state{module=Module, pid=Pid}}.
+    Pid = spawn_link(Module, handle_migration, [{Name, State}]),
+    {ok, #state{name=Name, module=Module, pid=Pid}}.
 
 
 %%--------------------------------------------------------------------
@@ -124,13 +124,7 @@ handle_call(introduce, _From, State) ->
 
 handle_call({migrate, Node, MigState}, _From, State) ->
     %% retrieve the name of the current agent
-    case process_info(self(), registered_name) of
-        {registered_name, Agent} ->
-            ok;
-        List ->
-            {value, {registerd_name, Agent}}
-                = lists:keysearch(registered_name, 1, List)
-    end,
+    Agent = State#state.name,
     %% ask to the manager to migrate
     Reply = manager:migrate(Agent, Node, MigState),
     {stop, migrated, Reply, State};

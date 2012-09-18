@@ -239,18 +239,19 @@ my_test_case(_Config) ->
 
 
 init_case(_Config) ->
+    Name = agent1,
     Module = tester_agent,
     Arguments = [10],
     State = [wait, 10],
 
     %% start case
-    {ok, #state{module=Module, arguments=Arguments, pid=Pid}} =
-        agent:init([start, Module, Arguments]),
+    {ok, #state{name = Name, module=Module, arguments=Arguments, pid=Pid}} =
+        agent:init([start, Name, Module, Arguments]),
     true = is_process_alive(Pid),
 
     %% reactivate case
-    {ok, #state{module=Module, pid=Pid2}} =
-        agent:init([reactivate, Module, State]),
+    {ok, #state{name = Name, module=Module, pid=Pid2}} =
+        agent:init([reactivate, Name, Module, State]),
     true = is_process_alive(Pid2),
 
     ok.

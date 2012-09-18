@@ -43,13 +43,13 @@ used_modules() ->
     [].
 
 
-init([Sec]) ->
+init({_Name, [Sec]}) ->
     ?MODULE:wait(Sec);
 init([]) ->
     ?MODULE:wait(10).
 
 
-handle_migration([wait, Sec]) ->
+handle_migration({_Name, [wait, Sec]}) ->
     ?MODULE:wait(Sec).
 
 

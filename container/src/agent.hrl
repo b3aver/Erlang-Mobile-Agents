@@ -8,4 +8,4 @@
 %%%-------------------------------------------------------------------
 
 
--record(state, {module, arguments, pid}).
+-record(state, {name,module, arguments, pid}).
