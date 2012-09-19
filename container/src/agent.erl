@@ -126,8 +126,12 @@ handle_call({migrate, Node, MigState}, _From, State) ->
     %% retrieve the name of the current agent
     Agent = State#state.name,
     %% ask to the manager to migrate
-    Reply = manager:migrate(Agent, Node, MigState),
-    {stop, migrated, Reply, State};
+    case manager:migrate(Agent, Node, MigState) of
+        ok ->
+            {stop, migrated, ok, State};
+        Reply ->
+            {reply, Reply, State}
+    end;
 
 
 handle_call(_Request, _From, State) ->
